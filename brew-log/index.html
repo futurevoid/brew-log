@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>سجل التحضير</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="brew-log\style.css">
+</head>
+<body>
+<div id="jsmsg" style="background:#d9534f;color:#fff;padding:12px 16px;text-align:center;font-weight:700;font-size:14px;line-height:1.7">الجافاسكربت ما اشتغل في هذا المتصفح، فالنموذج ما يشتغل. تأكد إن style.css و script.js بنفس مجلد index.html، وافتح الصفحة من متصفح مو من معاينة ديسكورد أو الملفات.<div id="jserr" dir="ltr" style="font-weight:400;font-size:12px;opacity:.9"></div></div>
+<div class="wrap">
+<main>
+<div class="top"><h1>سجل التحضير</h1><button type="button" class="btn" id="theme" aria-label="تبديل الوضع الداكن والفاتح"></button></div>
+<p class="sub">عبّ الحقول، والبوست يتركب جاهز على اليمين. الحقول الفاضية تنحذف تلقائي.</p>
+
+<fieldset><legend>القهوة</legend>
+<div class="g">
+<label>المحمصة<input type="text" id="roaster" placeholder="DAK"></label>
+<label>المحصول<input type="text" id="coffee" placeholder="Surf Jam"></label>
+<label>البلد<select id="origin" data-o="1"><option value="">—</option><option>كولومبيا</option><option>رواندا</option><option>كوستاريكا</option><option>إندونيسيا</option><option>البرازيل</option><option>اليمن</option><option>إثيوبيا</option><option>كينيا</option><option>السلفادور</option><option value="__o">دولة أخرى</option></select><input type="text" id="origin_o" hidden placeholder="اكتب هنا"></label><label>المعالجة<select id="process" data-o="1"><option value="">—</option><option>مغسول</option><option>مجفف</option><option>عسلي</option><option>لاهوائي</option><option value="__o">معالجة أخرى</option></select><input type="text" id="process_o" hidden placeholder="اكتب هنا"></label>
+<label>تاريخ التحميص<input type="date" id="roast"></label>
+</div></fieldset>
+
+<fieldset><legend>التحضير</legend>
+<div class="g">
+<label>طريقة التحضير<select id="method" data-o="1"><option value="">—</option><option>V60</option><option>Orea</option><option>Pulsar</option><option>AeroPress</option><option>B75</option><option>Origami</option><option>Kalita</option><option>Hario Switch</option><option>Chemex</option><option>Clever Dripper</option><option value="__o">طريقة ثانية</option></select><input type="text" id="method_o" hidden placeholder="اكتب هنا"></label>
+<label>الأداة<input type="text" id="tool" placeholder="V60 02 زجاج"></label>
+<label>الفلتر<input type="text" id="filter" placeholder="Sibarist / ورق أبيض"></label>
+<label>الطاحونة<select id="grinder" data-o="1"></select><input type="text" id="grinder_o" hidden placeholder="اكتب هنا"></label>
+<label>درجة الطحن<input type="text" id="grind" placeholder="3.0 / 7.5"></label>
+<div class="mic" style="grid-column:1/-1"><div id="micv"></div><label class="chk"><input type="checkbox" id="addmic" checked> أضف الميكرون للنص الجاهز</label><div class="hint">الميكرون = الكليكات × حركة البر لكل كليك. هذا بعد البر عن الصفر مو حجم الحبيبات الفعلي، يصلح للمقارنة التقريبية بين الطواحين.</div></div>
+<label>الماء<input type="text" id="water" placeholder="Volvic / ٦٠ صفا ٤٠"></label>
+<label>الحرارة (°م)<input type="number" id="temp" inputmode="decimal" placeholder="93"></label>
+</div>
+<div class="g" style="margin-top:10px">
+<label>الجرعة (غ)<input type="number" id="dose" inputmode="decimal" placeholder="15"></label>
+<label>الناتج (غ/مل)<input type="number" id="yield" inputmode="decimal" placeholder="250"></label>
+<label>الوقت الكلي<input type="text" id="time" placeholder="2:50"></label>
+</div>
+<div class="ratio" id="ratio"></div>
+</fieldset>
+
+<fieldset><legend>الوصفة (الصبّات)</legend>
+<div class="hint" style="margin:0 0 8px">اكتب وقت كل صبّة مباشرة: 45 = 0:45، و120 = 1:20، أو اكتبها بنقطتين 1:20. </div>
+<div class="ph"><span>الكمية</span><span>الوقت</span><span>ملاحظة</span><span></span></div>
+<div id="pours"></div>
+<button type="button" class="btn" id="addPour">+ أضف صبّة</button>
+</fieldset>
+
+<fieldset><legend>الطعم</legend>
+<label>وصف الطعم<textarea id="taste" rows="2" placeholder="حلاوة جميلة وفيه مرارة شوي"></textarea></label>
+<div style="margin-top:12px" id="sliders"></div>
+<label style="margin-top:8px">ملاحظات عامة<textarea id="notes" rows="2" placeholder="يحتاج اخشن شوي..."></textarea></label>
+</fieldset>
+
+<fieldset><legend>وش يحتاج تعديل؟</legend>
+<div class="chips" id="adj"></div>
+</fieldset>
+</main>
+
+<aside class="side">
+<h2>عنوان البوست</h2>
+<div id="title"></div>
+<h2>النص الجاهز</h2>
+<textarea id="out" readonly></textarea>
+<h2 style="margin-top:14px">التاقات اللي تختارها في ديسكورد</h2>
+<div class="chips" id="tags"></div>
+<div class="row">
+<button type="button" class="btn p" id="copyAll">نسخ النص</button>
+<button type="button" class="btn" id="copyTitle">نسخ العنوان</button>
+<button type="button" class="btn" id="reset">مسح</button>
+</div>
+<div class="hint" id="msg">اختر التاقات المذكورة فوق من ديسكورد بعد ما تلصق العنوان.</div>
+</aside>
+</div>
+
+<script src="/script.js"></script>
+</body>
+</html>

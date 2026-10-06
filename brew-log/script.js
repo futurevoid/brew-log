@@ -9,7 +9,7 @@ scores.forEach(function(s){var d=document.createElement("div");d.className="sl";
 adjs.forEach(function(a){var l=document.createElement("label");l.innerHTML='<input type="checkbox" value="'+a+'"> '+a;$("adj").appendChild(l)});
 
 function addPour(){var d=document.createElement("div");d.className="pour";
-d.innerHTML='<div class="ac"><input class="a" type="number" min="0" step="10" inputmode="numeric" placeholder="50" aria-label="الكمية بالمل"><span>مل</span></div><div class="tc"><input class="t" type="text" inputmode="numeric" autocomplete="off" placeholder="0:45" aria-label="وقت الصبّة"><span class="tm"></span></div><div class="nt"><input type="text" placeholder="تفتيح / صب بطيء" aria-label="ملاحظة"></div><button type="button" class="btn del" title="حذف الصبّة" aria-label="حذف الصبّة">✕</button>';
+d.innerHTML='<div class="ac"><input class="a" type="number" min="0" step="10" inputmode="numeric" placeholder="50" aria-label="الكمية بالمل"><span>مل</span></div><div class="tc"><input class="t" type="text" inputmode="numeric" autocomplete="off" placeholder="0:45" aria-label="وقت الصبّة"><span class="tm" dir="ltr"></span></div><div class="nt"><input type="text" placeholder="تفتيح / صب بطيء" aria-label="ملاحظة"></div><button type="button" class="btn del" title="حذف الصبّة" aria-label="حذف الصبّة">✕</button>';
 $("pours").appendChild(d)}
 function parseT(v){v=v.replace(/[٠-٩]/g,function(d){return d.charCodeAt(0)-1632}).replace(/[.,٫،;]/g,":");
 if(!/^\d+(:\d{1,2})?$/.test(v))return null;
@@ -83,7 +83,7 @@ function render(){
     line("طريقة التحضير",val("method")),line("الأداة",val("tool")),line("الفلتر",val("filter")),line("الطاحونة",val("grinder")),line("درجة الطحن",val("grind")?val("grind")+(mu&&$("addmic").checked?" (≈"+mu+" µm)":""):""),
     line("الماء",val("water")),line("الحرارة",val("temp")?val("temp")+"°":""),line("الجرعة",val("dose")?val("dose")+" غ":""),line("الناتج",val("yield")?val("yield")+" غ":""),
     (d>0&&y>0)?"النسبة: 1:"+(y/d).toFixed(1):"",line("الوقت الكلي",val("time")));
-  var run=0;var ps=[].slice.call(document.querySelectorAll(".pour")).map(function(p){var a=p.querySelector(".a").value.trim(),t=p.querySelector(".t").value.trim(),b=p.querySelector(".nt input").value.trim(),f="",bad=false;if(t!==""){var sec=parseT(t);if(sec===null)bad=true;else{f=fmtT(sec)}}p.querySelector(".tm").textContent=bad?"؟ مثل 1:20":"";var parts=[a?a+" مل":"",f,b].filter(Boolean);return parts.length?"- "+parts.join(" | "):""}).filter(Boolean);
+  var run=0;var ps=[].slice.call(document.querySelectorAll(".pour")).map(function(p){var a=p.querySelector(".a").value.trim(),t=p.querySelector(".t").value.trim(),b=p.querySelector(".nt input").value.trim(),f="",bad=false;if(t!==""){var sec=parseT(t);if(sec===null)bad=true;else{run+=sec;f=fmtT(run)}}p.querySelector(".tm").textContent=bad?"؟ مثل 1:20":(f?"= "+f:"");var parts=[a?a+" مل":"",f,b].filter(Boolean);return parts.length?"- "+parts.join(" | "):""}).filter(Boolean);
   if(ps.length){L.push("","الوصفة:");L=L.concat(ps)}
   var sc=[];
   scores.forEach(function(s){var e=$(s[1]);if(e.dataset.touched==="1")sc.push(s[0]+": "+e.value+"/10");$(s[1]+"v").textContent=e.dataset.touched==="1"?e.value+"/10":"—"});

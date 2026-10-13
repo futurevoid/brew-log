@@ -96,7 +96,7 @@ function render(){
   var t=head?head+(val("method")?" — "+val("method"):""):"";
   $("title").textContent=t||"العنوان يظهر هنا بعد ما تكتب المحمصة والمحصول";
   var L=[];
-  L.push(line("المحمصة",val("roaster")),line("المحصول",val("coffee")),line("البلد",val("origin")),line("المعالجة",val("process")),line("تاريخ التحميص",fmtDate(val("roast"))),"",
+  L.push(line("المحمصة",val("roaster")),line("المحصول",val("coffee")),line("البلد",val("origin")),line("المعالجة",val("process")),line("السلالة",val("variety")),line("درجة التحميص",val("level")),line("تاريخ التحميص",fmtDate(val("roast"))),"",
     line("طريقة التحضير",val("method")),line("الأداة",val("tool")),line("الفلتر",val("filter")),line("الطاحونة",val("grinder")),line("درجة الطحن",val("grind")?val("grind")+(mu&&$("addmic").checked?" ("+mu+")":""):""),
     line("الماء",val("water")),line("الحرارة",val("temp")?val("temp")+"°":""),line("الجرعة",val("dose")?val("dose")+" غ":""),line("الناتج",val("yield")?val("yield")+" غ":""),
     (d>0&&y>0)?"النسبة: 1:"+(y/d).toFixed(1):"",line("الوقت الكلي",val("time")));

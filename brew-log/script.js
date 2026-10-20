@@ -121,7 +121,7 @@ function copy(text,label){
 }
 // Added to the copied post only. <...> stops Discord from showing a link preview card.
 var SITE="https://h2beanbook.vercel.app";
-$("copyAll").onclick=function(){var t=$("out").value;if(t)t+="\n\n☕✨ **عجبك؟ سوّ سجلك بنفسك!** · **Make your own brew log!**\n👉 <"+SITE+">";copy(t,"النص")};
+$("copyAll").onclick=function(){var t=$("out").value;if(t)t+="\n\n☕✨ **عجبك؟ سوّ سجلك بنفسك!**\n👉 <"+SITE+">";copy(t,"النص")};
 $("copyTitle").onclick=function(){var t=$("title").textContent;if(t.indexOf("يظهر هنا")<0)copy(t,"العنوان")};
 $("reset").onclick=function(){
   document.querySelectorAll("input[type=text],input[type=number],input[type=date],textarea:not(#out)").forEach(function(e){e.value=""});

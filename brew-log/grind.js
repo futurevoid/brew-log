@@ -41,7 +41,7 @@ var view="an";
 function show(v){
   view=v;["an","tr","cmp","hist"].forEach(function(x){$("v-"+x).hidden=x!==v});
   [].forEach.call($("tabs").children,function(b){b.setAttribute("aria-pressed",b.dataset.v===v?"true":"false")});
-  if(v==="tr")renderTr();if(v==="cmp")renderCmp();if(v==="hist")renderHist();
+  if(v==="an")renderHome();if(v==="tr")renderTr();if(v==="cmp")renderCmp();if(v==="hist")renderHist();
   window.scrollTo(0,0);
 }
 $("tabs").addEventListener("click",function(e){var b=e.target.closest("button");if(b)show(b.dataset.v)});
@@ -98,7 +98,7 @@ function onFile(e){
   if(!cur||!addingSpread)newSession();
   photoIdx=addingSpread?cur.photos.length:0;addingSpread=false;showAnyway=false;
   status("نجهّز الصورة…");
-  loadImage(f).then(function(i){img=i;res=null;fix=null;crop=null;$("cropOn").checked=false;setMode(null);$("photoCard").hidden=false;draw();analyze()})
+  loadImage(f).then(function(i){img=i;res=null;fix=null;crop=null;$("cropOn").checked=false;setMode(null);$("photoCard").hidden=false;renderHome();draw();analyze()})
     .catch(function(){status("ما قدرنا نفتح الصورة. جرّب صورة ثانية.")});
 }
 ["cam","gal","gcam","ggal"].forEach(function(i){$(i).addEventListener("change",onFile)});
@@ -177,7 +177,7 @@ function renderResult(){
 }
 $("showAnyway").onclick=function(){showAnyway=true;renderResult()};
 $("retakeBtn").onclick=function(){guide(true)};
-$("newSample").onclick=function(){cur=null;img=null;res=null;$("photoCard").hidden=true;$("results").hidden=true;$("retake").hidden=true;window.scrollTo(0,0);$("cam").click()};
+$("newSample").onclick=function(){cur=null;img=null;res=null;$("photoCard").hidden=true;$("results").hidden=true;$("retake").hidden=true;renderHome();window.scrollTo(0,0)};
 
 function bars(list,cls){
   var m=0;list.forEach(function(s){s.hist.forEach(function(v){m=Math.max(m,v)})});m=m||1;
@@ -237,14 +237,15 @@ cv.addEventListener("pointermove",function(e){
 cv.addEventListener("pointerup",function(){drag=null});
 
 // ---------- use in brew ----------
-$("useBrew").onclick=function(){
-  var s=cur&&cur.sample;if(!s)return;
+$("useBrew").onclick=function(){useInBrew(cur&&cur.sample)};
+function useInBrew(s){
+  if(!s)return;
   var d=lsGet(DRAFT,{v:{}});d.v=d.v||{};
   if(s.grinder){d.v.grinder=s.grinder;d.v.grind=s.setting}
   var c=cutoff();
   d.v.gmeas=JSON.stringify({d10:s.d10,d50:s.d50,d90:s.d90,f:Math.round((s.fines[c]||0)*1000)/10,c:c,n:s.count});
   lsSet(DRAFT,d);location.href="index.html";
-};
+}
 $("goTr").onclick=function(){show("tr")};$("goCmp").onclick=function(){cmpMode="tr";show("cmp")};
 
 // ---------- translate ----------
@@ -387,3 +388,39 @@ if(!lsGet("grind-guide-seen",0))guide(true);
 
 // Offline: cache the site and OpenCV.js so analysis works without internet after the first visit.
 if("serviceWorker" in navigator&&location.protocol!=="file:")navigator.serviceWorker.register("sw.js").catch(function(){});
+
+// ---------- home (analyzer main screen, shown until a photo is loaded) ----------
+function renderHome(){
+  var el=$("home");
+  if(img){el.hidden=true;return}
+  el.hidden=false;
+  var list=samples.slice().sort(function(a,b){return b.t-a.t}),c=cutoff();
+  if(!list.length){
+    el.innerHTML='<div class="card"><h2>وش يطلع لك؟</h2><ul class="steps" style="margin:0 0 10px">'
+      +'<li><b>حجم الحبيبات</b>: D50 والنواعم وتوزيع الأحجام.</li><li><b>ترجمة الطحنة</b>: نفس الحجم على أي طاحونة من 212.</li><li><b>متابعة الترس</b>: كيف تتغير النواعم مع الوقت.</li></ul>'
+      +'<button type="button" class="btn" data-h="guide">كيف أصوّر؟</button></div>';
+    return;
+  }
+  var s=list[0],gsAll={},ready=0,partial=0;
+  samples.forEach(function(x){if(x.grinder)gsAll[x.grinder]=1});
+  Object.keys(gsAll).forEach(function(k){if(GrindTranslate.curve(samples,k).ready)ready++;else partial++});
+  el.innerHTML='<div class="card"><div class="d50row"><span class="hint" style="margin:0">آخر قياس · '+fmtDate(s.t)+'</span><span class="hint" style="margin:0">'+esc(sName(s))+'</span></div>'
+    +'<b class="big" dir="ltr" style="display:block;text-align:right;margin:4px 0">D50 ≈ '+n0(s.d50)+' µm</b>'
+    +'<div class="stats"><div><span>D10</span><b dir="ltr">'+n0(s.d10)+'</b></div><div><span>D90</span><b dir="ltr">'+n0(s.d90)+'</b></div><div><span>نواعم &lt;'+c+'</span><b>'+pc(s.fines[c]||0)+'</b></div><div><span>العدد</span><b>'+n0(s.count)+'</b></div></div>'
+    +'<div class="row"><button type="button" class="btn p" data-h="brew" style="flex:1">استخدم في وصفتي</button><button type="button" class="btn" data-h="tr">ترجم</button><button type="button" class="btn" data-h="cmp">قارن</button></div></div>'
+    +'<div class="hstats"><div class="card"><b>'+samples.length+'</b><span>قياس محفوظ</span></div><div class="card"><b>'+ready+'</b><span>طاحونة معايرة</span></div><div class="card"><b>'+partial+'</b><span>قيد المعايرة</span></div></div>'
+    +(list.length>1?'<div class="card"><div class="d50row"><h2 style="margin:0">آخر القياسات</h2><button type="button" class="btn" data-h="hist">كل السجل</button></div>'
+      +list.slice(0,3).map(function(x){return'<button type="button" class="hmini" data-id="'+x.id+'"><span>'+esc(sName(x))+'<small>'+fmtDate(x.t)+'</small></span><b dir="ltr">'+n0(x.d50)+' µm</b></button>'}).join("")+'</div>':"");
+}
+$("home").addEventListener("click",function(e){
+  var b=e.target.closest("[data-h],[data-id]");if(!b)return;
+  var s=latest();
+  if(b.dataset.id){selId=b.dataset.id;show("tr");return}
+  var h=b.dataset.h;
+  if(h==="guide")guide(true);
+  else if(h==="brew")useInBrew(s);
+  else if(h==="tr"){selId=s.id;show("tr")}
+  else if(h==="cmp"){cmpMode=GrindTranslate.latestPair(samples)?"latest":"any";show("cmp")}
+  else if(h==="hist")show("hist");
+});
+renderHome();

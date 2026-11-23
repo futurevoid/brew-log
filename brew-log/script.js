@@ -115,7 +115,11 @@ function render(){
   $("title").textContent=t||"العنوان يظهر هنا بعد ما تكتب المحمصة والمحصول";
   // Empty fields are dropped inside each block so they leave no blank lines in the post.
   var coffee=[line("المحمصة",val("roaster")),line("المحصول",val("coffee")),line("البلد",val("origin")),line("المعالجة",val("process")),line("السلالة",val("variety")),line("درجة التحميص",val("level")),line("تاريخ التحميص",fmtDate(val("roast")))].filter(Boolean);
-  var brew=[line("طريقة التحضير",val("method")),line("الأداة",val("tool")),line("الفلتر",val("filter")),line("الطاحونة",val("grinder")),line("درجة الطحن",val("grind")?val("grind")+(mu&&$("addmic").checked?" ("+mu+")":""):""),
+  // A photo measurement from grind.html replaces the chart estimate in the post.
+  var gm=null;try{gm=$("gmeas").value?JSON.parse($("gmeas").value):null}catch(e){gm=null}
+  $("gmv").hidden=!gm;
+  if(gm)$("gmv").innerHTML='<span>قياس من صورة: <b dir="ltr">D50 '+gm.d50+' µm</b> · نواعم '+gm.f+'%</span><button type="button" class="btn" id="gmx" aria-label="شيل القياس">✕</button>';
+  var brew=[line("طريقة التحضير",val("method")),line("الأداة",val("tool")),line("الفلتر",val("filter")),line("الطاحونة",val("grinder")),line("درجة الطحن",val("grind")?val("grind")+(mu&&$("addmic").checked&&!gm?" ("+mu+")":""):""),gm?"التحليل من صورة: D50 "+gm.d50+" µm · D10 "+gm.d10+" · D90 "+gm.d90+" · نواعم "+gm.f+"% (<"+gm.c+" µm) · "+Number(gm.n).toLocaleString("en-US")+" حبيبة":"",
     line("الماء",val("water")),line("الحرارة",val("temp")?val("temp")+"°":""),line("الجرعة",val("dose")?val("dose")+" غ":""),line("الناتج",val("yield")?val("yield")+" غ":""),
     (d>0&&y>0)?"النسبة: 1:"+(y/d).toFixed(1):"",line("الوقت الكلي",val("time"))].filter(Boolean);
   var L=coffee.concat(coffee.length&&brew.length?[""]:[],brew);
@@ -180,7 +184,7 @@ function clearForm(){
   document.querySelectorAll("#adj input").forEach(function(c){c.checked=false});
   buildGrinders("");
   document.querySelectorAll("select").forEach(function(x){x.selectedIndex=0});
-  $("addmic").checked=true;
+  $("addmic").checked=true;$("gmeas").value="";
   scores.forEach(function(s){$(s[1]).value=5;$(s[1]).dataset.touched="0"});
   $("pours").innerHTML="";addPour();addPour();
 }
@@ -203,3 +207,5 @@ themeLabel();
 try{var dr=localStorage.getItem(DRAFT);if(dr)load(JSON.parse(dr))}catch(e){}
 loaded=true;
 render();
+
+$("gmv").addEventListener("click",function(e){if(e.target.closest("#gmx")){$("gmeas").value="";render()}});

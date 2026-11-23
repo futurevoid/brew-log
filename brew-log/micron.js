@@ -98,5 +98,12 @@ var Micron=(function(){
   function info(key){var g=byKey[key];if(!g)return null;prep(g);return {name:g.name,lo:g.lo,hi:g.hi,first:g.t[0],last:g.t[g.t.length-1],ph:g.t[Math.round((g.t.length-1)*0.4)]}}
   function find(name){var n=String(name).toLowerCase();for(var i=0;i<list.length;i++)if(list[i].name.toLowerCase()===n)return list[i].key;return ""}
 
-  return {list:list,calc:calc,hint:hint,info:info,find:find,norm:norm};
+  // A grinder's dial as the chart lists it: labels in order, which positions are a setting's first
+  // occurrence (repeated labels are spacing), and the chart's micron estimate at any position.
+  function dial(key){
+    var g=byKey[key];if(!g)return null;prep(g);
+    return {labels:g.t.slice(),uniq:g.n.map(function(s,i){return g.first[s]===i}),lo:g.lo,hi:g.hi,um:function(i){return um(g,i)}};
+  }
+
+  return {list:list,calc:calc,hint:hint,info:info,find:find,norm:norm,dial:dial};
 })();

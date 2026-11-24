@@ -135,7 +135,8 @@ h1,legend,.side h2,#title,.mic .big,.btn.p{font-family:"IBM Plex Sans Arabic",Ta
 .hrow{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
 .hrow>div:first-child{flex:1;display:flex;flex-direction:column;min-width:0}
 .hrow span{font-size:12px;color:var(--mute)}
-.hnum{display:flex;flex-direction:column;align-items:flex-end;font-size:14px}
+.hnum{display:flex;flex-direction:column;align-items:flex-end;font-size:14px;white-space:nowrap}
+.hnum b{font-weight:600}
 .modal{position:fixed;inset:0;z-index:30;background:rgba(20,14,10,.45);display:flex;align-items:flex-end;justify-content:center;padding:16px}
 .modal[hidden]{display:none}
 .mbox{background:var(--card);color:var(--ink);border-radius:14px;padding:16px;max-width:520px;width:100%;max-height:90vh;overflow:auto}

@@ -17,7 +17,7 @@ function cutoff(){return +(lsGet("grind-cutoff",200))||200}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 var toastT;function toast(m){var t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true},2600)}
 function n0(v){return Math.round(v).toLocaleString("en-US")}
-function pc(v){return (v*100).toFixed(v<0.1?1:0)+"%"}
+function pc(v){return "\u2066"+(v*100).toFixed(v<0.1?1:0)+"%\u2069"}
 function fmtDate(t){try{return new Date(t).toLocaleDateString("ar-u-ca-gregory-nu-latn",{day:"numeric",month:"short"})}catch(e){return new Date(t).toISOString().slice(0,10)}}
 function gname(k){var i=Micron.info(k);return i?i.name:k}
 function sName(s){return s.grinder?gname(s.grinder)+" · "+s.setting:"بدون طاحونة"}
@@ -188,6 +188,19 @@ function headline(s){
   }
 }
 
+// What a saved measurement reads as everywhere in the app: on the grinder's own chart scale once that grinder is
+// calibrated (same number as the result screen), otherwise the photo's own D50.
+function readout(s){
+  var e=eqInfo(s);
+  if(e&&!e.outside&&e.um!=null){
+    var chart=s.grinder===e.k&&s.idx!=null?Math.round(Micron.dial(e.k).um(s.idx)):null;
+    return {cal:true,um:Math.round(e.um),k:e.k,setting:e.setting,chart:chart};
+  }
+  return {cal:false,um:Math.round(s.d50)};
+}
+// Name in lists: the grinder and setting; a photo saved without a setting shows the setting it matches.
+function listName(s,r){return s.grinder?sName(s):(r&&r.cal?gname(r.k)+" · \u2066≈\u00a0"+r.setting+"\u2069":"بدون طاحونة")}
+
 function renderSpreads(){
   var h='<span class="hint" style="margin:0">الفرشات</span>';
   cur.photos.forEach(function(p,i){h+='<span class="chipon">'+(i+1)+' ✓</span>'});
@@ -286,9 +299,13 @@ $("useBrew").onclick=function(){useInBrew(cur&&cur.sample)};
 function useInBrew(s){
   if(!s)return;
   var d=lsGet(DRAFT,{v:{}});d.v=d.v||{};
+  var r=readout(s);
   if(s.grinder){d.v.grinder=s.grinder;d.v.grind=s.setting}
-  var c=cutoff();
-  d.v.gmeas=JSON.stringify({d10:s.d10,d50:s.d50,d90:s.d90,f:Math.round((s.fines[c]||0)*1000)/10,c:c,n:s.count});
+  else if(r.cal)d.v.grinder=r.k;
+  var c=cutoff(),m={d10:s.d10,d50:s.d50,d90:s.d90,f:Math.round((s.fines[c]||0)*1000)/10,c:c,n:s.count};
+  // Calibrated: the post shows the size on the grinder's chart scale, the number people compare.
+  if(r.cal){m.eq=r.um;m.g=gname(r.k)}
+  d.v.gmeas=JSON.stringify(m);
   lsSet(DRAFT,d);location.href="index.html";
 }
 $("goTr").onclick=function(){show("tr")};$("goCmp").onclick=function(){cmpMode="tr";show("cmp")};
@@ -299,8 +316,9 @@ function sel(){return byId(selId)||latest()}
 function renderTr(){
   var s=sel();
   if(!s){$("trSample").innerHTML='<p class="hint" style="margin:0">ما فيه قياسات بعد. صوّر طحنة من قسم «تحليل».</p>';$("trRows").innerHTML="";return}
-  var opts=samples.slice().sort(function(a,b){return b.t-a.t}).map(function(x){return'<option value="'+x.id+'"'+(x.id===s.id?" selected":"")+'>'+esc(sName(x))+" · "+fmtDate(x.t)+'</option>'}).join("");
-  $("trSample").innerHTML='<div class="hint" style="margin:0">من الصورة · '+fmtDate(s.t)+" · "+s.spreads+' فرشة</div><b class="big" dir="ltr" style="display:block;text-align:right">D50 ≈ '+n0(s.d50)+' µm</b><div class="hint" style="margin:0">نواعم '+pc(s.fines[cutoff()]||0)+" · D10 "+n0(s.d10)+" · D90 "+n0(s.d90)+'</div><label style="margin-top:8px">عينة ثانية<select id="trPick">'+opts+'</select></label>';
+  var opts=samples.slice().sort(function(a,b){return b.t-a.t}).map(function(x){return'<option value="'+x.id+'"'+(x.id===s.id?" selected":"")+'>'+esc(listName(x,readout(x)))+" · "+fmtDate(x.t)+'</option>'}).join("");
+  var rt=readout(s);
+  $("trSample").innerHTML='<div class="hint" style="margin:0">'+esc(listName(s,rt))+' · '+fmtDate(s.t)+" · "+s.spreads+' فرشة</div><b class="big" dir="ltr" style="display:block;text-align:right">'+(rt.cal?"≈ "+n0(rt.um)+" µm":"D50 ≈ "+n0(rt.um)+" µm")+'</b>'+(rt.cal?'<div class="hint" style="margin:0">على سلّم '+esc(gname(rt.k))+(rt.chart!=null?' · الجدول <bdi dir="ltr">'+n0(rt.chart)+'</bdi>':"")+' · قياس الصورة D50 <bdi dir="ltr">'+n0(s.d50)+'</bdi></div>':"")+'<div class="hint" style="margin:0">نواعم '+pc(s.fines[cutoff()]||0)+" · D10 "+n0(s.d10)+" · D90 "+n0(s.d90)+' (من الصورة)</div><label style="margin-top:8px">عينة ثانية<select id="trPick">'+opts+'</select></label>';
   $("trPick").onchange=function(){selId=this.value;renderTr()};
   $("hasSrc").checked=!!s.grinder||srcOpen;$("srcBox").hidden=!s.grinder&&!srcOpen;
   if(!$("srcBox").hidden){fillGrinders($("srcG"),$("srcQ").value,s.grinder||$("srcG").value);if(document.activeElement!==$("srcSet"))$("srcSet").value=s.setting||"";$("calib").checked=s.calib!==false}
@@ -381,7 +399,7 @@ $("cmpTabs").addEventListener("click",function(e){var b=e.target.closest("button
 function renderCmp(){
   [].forEach.call($("cmpTabs").children,function(b){b.setAttribute("aria-pressed",b.dataset.m===cmpMode?"true":"false")});
   var list=samples.slice().sort(function(a,b){return b.t-a.t}),A=null,B=null,la="أ",lb="ب",pick="";
-  function opts(cur){return list.map(function(x){return'<option value="'+x.id+'"'+(x.id===cur?" selected":"")+'>'+esc(sName(x))+" · "+fmtDate(x.t)+'</option>'}).join("")}
+  function opts(cur){return list.map(function(x){return'<option value="'+x.id+'"'+(x.id===cur?" selected":"")+'>'+esc(listName(x,readout(x)))+" · "+fmtDate(x.t)+'</option>'}).join("")}
   if(cmpMode==="any"){
     if(list.length<2){$("cmpPick").innerHTML='<p class="hint" style="margin:0">تحتاج قياسين على الأقل.</p>';$("cmpOut").innerHTML="";return}
     cmpA=byId(cmpA)?cmpA:list[0].id;cmpB=byId(cmpB)?cmpB:list[1].id;A=byId(cmpA);B=byId(cmpB);
@@ -441,7 +459,9 @@ function renderHist(){
   }).join(""):'<p class="hint">حدد الطاحونة والإعداد لصورك من قسم «ترجمة»، وكل صورة تنحسب في معايرتها.</p>');
   var list=samples.slice().sort(function(a,b){return b.t-a.t});
   $("histList").innerHTML=list.length?list.map(function(s){
-    return'<div class="hrow"><div><b>'+esc(sName(s))+'</b><span>'+fmtDate(s.t)+" · "+s.spreads+" فرشة"+(s.grinder&&s.calib!==false?" · معايرة":"")+'</span></div><div class="hnum"><span dir="ltr">D50 '+n0(s.d50)+'</span><span>نواعم '+pc(s.fines[c]||0)+'</span></div><button type="button" class="btn" data-tr="'+s.id+'">ترجم</button><button type="button" class="btn del" data-del="'+s.id+'" aria-label="احذف القياس">✕</button></div>';
+    var r=readout(s);
+    var meta=[fmtDate(s.t),s.spreads>1?s.spreads+" فرشات":"",s.grinder&&s.calib!==false?"معايرة":"","نواعم\u00a0"+pc(s.fines[c]||0)].filter(Boolean).join(" · ");
+    return'<div class="hrow"><div><b>'+esc(listName(s,r))+'</b><span>'+meta+'</span></div><div class="hnum"><b dir="ltr">'+(r.cal?"≈ "+n0(r.um)+" µm":"D50 "+n0(r.um))+'</b>'+(r.chart!=null?'<span>الجدول <bdi dir="ltr">'+n0(r.chart)+'</bdi></span>':"")+'</div><button type="button" class="btn" data-tr="'+s.id+'">ترجم</button><button type="button" class="btn del" data-del="'+s.id+'" aria-label="احذف القياس">✕</button></div>';
   }).join(""):'<p class="hint">ما فيه قياسات محفوظة بعد.</p>';
 }
 $("histList").addEventListener("click",function(e){
@@ -489,13 +509,15 @@ function renderHome(){
   var s=list[0],gsAll={},ready=0,partial=0;
   samples.forEach(function(x){if(x.grinder)gsAll[x.grinder]=1});
   Object.keys(gsAll).forEach(function(k){if(GrindTranslate.curve(samples,k).ready)ready++;else partial++});
-  el.innerHTML='<div class="card"><div class="d50row"><span class="hint" style="margin:0">آخر قياس · '+fmtDate(s.t)+'</span><span class="hint" style="margin:0">'+esc(sName(s))+'</span></div>'
-    +'<b class="big" dir="ltr" style="display:block;text-align:right;margin:4px 0">D50 ≈ '+n0(s.d50)+' µm</b>'
+  var rs=readout(s);
+  el.innerHTML='<div class="card"><div class="d50row"><span class="hint" style="margin:0">آخر قياس · '+fmtDate(s.t)+'</span><span class="hint" style="margin:0">'+esc(listName(s,rs))+'</span></div>'
+    +'<b class="big" dir="ltr" style="display:block;text-align:right;margin:4px 0">'+(rs.cal?"≈ "+n0(rs.um)+" µm":"D50 ≈ "+n0(rs.um)+" µm")+'</b>'
+    +(rs.cal?'<p class="hint" style="margin:0 0 6px">على سلّم '+esc(gname(rs.k))+' · قياس الصورة D50 <bdi dir="ltr">'+n0(s.d50)+'</bdi> µm</p>':"")
     +'<div class="stats"><div><span>D10</span><b dir="ltr">'+n0(s.d10)+'</b></div><div><span>D90</span><b dir="ltr">'+n0(s.d90)+'</b></div><div><span>نواعم &lt;'+c+'</span><b>'+pc(s.fines[c]||0)+'</b></div><div><span>العدد</span><b>'+n0(s.count)+'</b></div></div>'
     +'<div class="row"><button type="button" class="btn p" data-h="brew" style="flex:1">استخدم في وصفتي</button><button type="button" class="btn" data-h="tr">ترجم</button><button type="button" class="btn" data-h="cmp">قارن</button></div></div>'
     +'<div class="hstats"><div class="card"><b>'+samples.length+'</b><span>قياس محفوظ</span></div><div class="card"><b>'+ready+'</b><span>طاحونة معايرة</span></div><div class="card"><b>'+partial+'</b><span>قيد المعايرة</span></div></div>'
     +(list.length>1?'<div class="card"><div class="d50row"><h2 style="margin:0">آخر القياسات</h2><button type="button" class="btn" data-h="hist">كل السجل</button></div>'
-      +list.slice(0,3).map(function(x){return'<button type="button" class="hmini" data-id="'+x.id+'"><span>'+esc(sName(x))+'<small>'+fmtDate(x.t)+'</small></span><b dir="ltr">'+n0(x.d50)+' µm</b></button>'}).join("")+'</div>':"");
+      +list.slice(0,3).map(function(x){var rx=readout(x);return'<button type="button" class="hmini" data-id="'+x.id+'"><span>'+esc(listName(x,rx))+'<small>'+fmtDate(x.t)+'</small></span><b dir="ltr">'+(rx.cal?"≈ ":"")+n0(rx.um)+' µm</b></button>'}).join("")+'</div>':"");
 }
 $("home").addEventListener("click",function(e){
   var b=e.target.closest("[data-h],[data-id]");if(!b)return;

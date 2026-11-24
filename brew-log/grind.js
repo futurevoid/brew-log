@@ -156,7 +156,27 @@ function onResult(r){
 // The headline number: once the grinder is calibrated (4+ photos at different settings), D50 is shown on the
 // grinder's own chart scale, so it reads like the grinder's setting does. The raw photo measurement stays beneath it.
 function eqInfo(s){
-  var k=s.grinder||lsGet(LASTG,"");if(!k)return null;
+  var k=s.grinder||lsGet(LASTG,"");
+  // Your own calibration of this grinder wins once it has enough settings; otherwise the built-in one.
+  var own=k?ownEq(s,k):null;
+  if(own&&!own.outside)return own;
+  return refEq(s,k)||own;
+}
+// Built-in calibration: photo D50 -> chart micron (one scale for all grinders), then the grinder's chart gives the setting.
+function refEq(s,k){
+  var r=GrindTranslate.reference(),um=r.um(s.d50);
+  if(!(um>=60))return null;
+  // ±2%: the worst hold-one-out error of the built-in calibration on the real page.
+  var res={k:k||null,um:um,setting:null,acc:Math.max(2,r.acc),outside:false,extrap:s.d50<r.min*0.9||s.d50>r.max*1.1,ref:true};
+  if(k){
+    var d=Micron.dial(k),lo=Math.min(d.lo,d.hi),hi=Math.max(d.lo,d.hi),best=-1,bd=Infinity;
+    if(um>=lo*0.97&&um<=hi*1.03){for(var i=0;i<d.labels.length;i++){if(!d.uniq[i])continue;var dv=Math.abs(d.um(i)-um);if(dv<bd){bd=dv;best=i}}res.setting=d.labels[best]}
+    else res.offDial=true;
+  }
+  return res;
+}
+function scaleName(k){return k?"على سلّم "+gname(k):"بميكرون الجداول"}
+function ownEq(s,k){
   var c=GrindTranslate.curve(samples,k);if(!c.ready)return null;
   var d=Micron.dial(k),r=GrindTranslate.regress(samples,k,d);
   // Preferred: straight-line fit of chart micron vs measured D50 (smooths photo-to-photo noise).
@@ -180,8 +200,10 @@ function headline(s){
   var e=eqInfo(s),raw="قياس الصورة الفعلي: D50 "+n0(s.d50)+" µm";
   if(e&&!e.outside){
     $("rD50").textContent="≈ "+n0(e.um)+" µm";
-    $("rD50L").textContent="على سلّم "+gname(e.k)+(e.extrap?" · تقدير خارج المعايرة":e.acc!=null?" · ±"+e.acc.toFixed(e.acc<1?1:0)+"%":"");
-    $("rRaw").textContent=raw+" · الإعداد التقريبي "+e.setting+"  (D10 وD90 وباقي الأرقام مقاسة من الصورة مباشرة)";
+    var pm=e.acc!=null?"\u2066±"+e.acc.toFixed(e.acc<1?1:0)+"%\u2069":"";
+    $("rD50L").textContent=scaleName(e.k)+" · "+(e.extrap?"تقدير خارج نطاق المعايرة":(e.ref?"معايرة مدمجة ":"")+pm);
+    var where=e.setting?" · الإعداد التقريبي "+e.setting:e.k&&e.offDial?" · خارج مدى "+gname(e.k):" · اختر طاحونتك تحت ويطلع لك إعدادها";
+    $("rRaw").textContent=raw+where+"  (D10 وD90 وباقي الأرقام مقاسة من الصورة مباشرة)";
   }else{
     $("rD50").textContent="≈ "+n0(s.d50)+" µm";$("rD50L").textContent="D50 · الحجم الأوسط";
     $("rRaw").textContent=e&&e.outside?"هذي الطحنة خارج مدى معايرة "+gname(e.k)+"، فنعرض القياس من الصورة مباشرة.":"نص القهوة (بالحجم) أصغر من هذا الرقم، ونصها أكبر. لتظهر القيمة على سلّم طاحونتك: اختر الطاحونة وصوّر ٤ إعدادات مختلفة.";
@@ -193,13 +215,13 @@ function headline(s){
 function readout(s){
   var e=eqInfo(s);
   if(e&&!e.outside&&e.um!=null){
-    var chart=s.grinder===e.k&&s.idx!=null?Math.round(Micron.dial(e.k).um(s.idx)):null;
-    return {cal:true,um:Math.round(e.um),k:e.k,setting:e.setting,chart:chart};
+    var chart=e.k&&s.grinder===e.k&&s.idx!=null?Math.round(Micron.dial(e.k).um(s.idx)):null;
+    return {cal:true,um:Math.round(e.um),k:e.k,setting:e.setting,chart:chart,ref:!!e.ref};
   }
   return {cal:false,um:Math.round(s.d50)};
 }
 // Name in lists: the grinder and setting; a photo saved without a setting shows the setting it matches.
-function listName(s,r){return s.grinder?sName(s):(r&&r.cal?gname(r.k)+" · \u2066≈\u00a0"+r.setting+"\u2069":"بدون طاحونة")}
+function listName(s,r){return s.grinder?sName(s):(r&&r.cal&&r.k&&r.setting?gname(r.k)+" · \u2066≈\u00a0"+r.setting+"\u2069":"بدون طاحونة")}
 
 function renderSpreads(){
   var h='<span class="hint" style="margin:0">الفرشات</span>';
@@ -301,10 +323,10 @@ function useInBrew(s){
   var d=lsGet(DRAFT,{v:{}});d.v=d.v||{};
   var r=readout(s);
   if(s.grinder){d.v.grinder=s.grinder;d.v.grind=s.setting}
-  else if(r.cal)d.v.grinder=r.k;
+  else if(r.cal&&r.k)d.v.grinder=r.k;
   var c=cutoff(),m={d10:s.d10,d50:s.d50,d90:s.d90,f:Math.round((s.fines[c]||0)*1000)/10,c:c,n:s.count};
   // Calibrated: the post shows the size on the grinder's chart scale, the number people compare.
-  if(r.cal){m.eq=r.um;m.g=gname(r.k)}
+  if(r.cal){m.eq=r.um;m.g=r.k?gname(r.k):""}
   d.v.gmeas=JSON.stringify(m);
   lsSet(DRAFT,d);location.href="index.html";
 }
@@ -318,17 +340,17 @@ function renderTr(){
   if(!s){$("trSample").innerHTML='<p class="hint" style="margin:0">ما فيه قياسات بعد. صوّر طحنة من قسم «تحليل».</p>';$("trRows").innerHTML="";return}
   var opts=samples.slice().sort(function(a,b){return b.t-a.t}).map(function(x){return'<option value="'+x.id+'"'+(x.id===s.id?" selected":"")+'>'+esc(listName(x,readout(x)))+" · "+fmtDate(x.t)+'</option>'}).join("");
   var rt=readout(s);
-  $("trSample").innerHTML='<div class="hint" style="margin:0">'+esc(listName(s,rt))+' · '+fmtDate(s.t)+" · "+s.spreads+' فرشة</div><b class="big" dir="ltr" style="display:block;text-align:right">'+(rt.cal?"≈ "+n0(rt.um)+" µm":"D50 ≈ "+n0(rt.um)+" µm")+'</b>'+(rt.cal?'<div class="hint" style="margin:0">على سلّم '+esc(gname(rt.k))+(rt.chart!=null?' · الجدول <bdi dir="ltr">'+n0(rt.chart)+'</bdi>':"")+' · قياس الصورة D50 <bdi dir="ltr">'+n0(s.d50)+'</bdi></div>':"")+'<div class="hint" style="margin:0">نواعم '+pc(s.fines[cutoff()]||0)+" · D10 "+n0(s.d10)+" · D90 "+n0(s.d90)+' (من الصورة)</div><label style="margin-top:8px">عينة ثانية<select id="trPick">'+opts+'</select></label>';
+  $("trSample").innerHTML='<div class="hint" style="margin:0">'+esc(listName(s,rt))+' · '+fmtDate(s.t)+" · "+s.spreads+' فرشة</div><b class="big" dir="ltr" style="display:block;text-align:right">'+(rt.cal?"≈ "+n0(rt.um)+" µm":"D50 ≈ "+n0(rt.um)+" µm")+'</b>'+(rt.cal?'<div class="hint" style="margin:0">'+esc(scaleName(rt.k))+(rt.chart!=null?' · الجدول <bdi dir="ltr">'+n0(rt.chart)+'</bdi>':"")+' · قياس الصورة D50 <bdi dir="ltr">'+n0(s.d50)+'</bdi></div>':"")+'<div class="hint" style="margin:0">نواعم '+pc(s.fines[cutoff()]||0)+" · D10 "+n0(s.d10)+" · D90 "+n0(s.d90)+' (من الصورة)</div><label style="margin-top:8px">عينة ثانية<select id="trPick">'+opts+'</select></label>';
   $("trPick").onchange=function(){selId=this.value;renderTr()};
   $("hasSrc").checked=!!s.grinder||srcOpen;$("srcBox").hidden=!s.grinder&&!srcOpen;
   if(!$("srcBox").hidden){fillGrinders($("srcG"),$("srcQ").value,s.grinder||$("srcG").value);if(document.activeElement!==$("srcSet"))$("srcSet").value=s.setting||"";$("calib").checked=s.calib!==false}
   calNote(s);
-  var allow=$("allowEst").checked;
+  var allow=$("allowEst").checked,ru=readout(s);
   $("trRows").innerHTML=targets.length?targets.map(function(k,i){
-    var r=GrindTranslate.translate(s,k,Micron.dial(k),samples,{allowEst:allow}),note,cls;
+    var r=GrindTranslate.translate(s,k,Micron.dial(k),samples,{allowEst:allow,um:ru.cal?ru.um:0}),note,cls;
     if(r.blocked){note="تحتاج "+r.need+" إعدادات مقاسة زيادة";cls="est"}
     else if(r.measured){note="مقاسة · "+r.samples+" قياسات"+(r.acc!=null?" · الدقة ±"+r.acc.toFixed(r.acc<1?1:0)+"%":"")+(r.overlap!=null?" · التطابق "+Math.round(r.overlap*100)+"%":"");cls="meas"}
-    else{note="تقدير من الجدول";cls="est"}
+    else{note=r.ref?"معايرة مدمجة + جدول الطاحونة":"تقدير من الجدول";cls="est"}
     if(r.outside)note+=" · الطحنة خارج المدى";
     if(s.grinder===k)note+=" · إعدادك: "+s.setting;
     return'<div class="trrow '+cls+'"><div><b>'+esc(gname(k))+'</b><span>'+esc(note)+'</span></div><div class="trset"><span>الإعداد</span><b dir="ltr">'+(r.blocked?"—":esc(r.setting))+'</b></div><button type="button" class="btn del" data-i="'+i+'" aria-label="شيل الطاحونة">✕</button></div>';
@@ -370,7 +392,7 @@ function quickInfo(s){
   var c=GrindTranslate.contribution(samples,s).after,e=c.ready?eqInfo(s):null;
   if(e&&!e.outside)el.textContent="≈ "+n0(e.um)+" µm على سلّم "+gname(s.grinder)+" (إعداد تقريبي "+e.setting+") · "+(e.extrap?"تقدير خارج المعايرة":"±"+(e.acc!=null?e.acc.toFixed(0)+"%":"؟"));
   else if(c.ready)el.textContent="هذي الطحنة خارج مدى معايرة "+gname(s.grinder);
-  else el.textContent="انحسبت في المعايرة · "+c.settings+" من "+GrindTranslate.MIN_SETTINGS+" إعدادات لتفعيل الترجمة الدقيقة";
+  else el.textContent="القراءة فوق بالمعايرة المدمجة · وانحسبت في معايرتك الخاصة ("+c.settings+" من "+GrindTranslate.MIN_SETTINGS+" إعدادات)";
 }
 function quickFill(s){
   var last=lsGet(LASTG,"");
@@ -512,7 +534,7 @@ function renderHome(){
   var rs=readout(s);
   el.innerHTML='<div class="card"><div class="d50row"><span class="hint" style="margin:0">آخر قياس · '+fmtDate(s.t)+'</span><span class="hint" style="margin:0">'+esc(listName(s,rs))+'</span></div>'
     +'<b class="big" dir="ltr" style="display:block;text-align:right;margin:4px 0">'+(rs.cal?"≈ "+n0(rs.um)+" µm":"D50 ≈ "+n0(rs.um)+" µm")+'</b>'
-    +(rs.cal?'<p class="hint" style="margin:0 0 6px">على سلّم '+esc(gname(rs.k))+' · قياس الصورة D50 <bdi dir="ltr">'+n0(s.d50)+'</bdi> µm</p>':"")
+    +(rs.cal?'<p class="hint" style="margin:0 0 6px">'+esc(scaleName(rs.k))+' · قياس الصورة D50 <bdi dir="ltr">'+n0(s.d50)+'</bdi> µm</p>':"")
     +'<div class="stats"><div><span>D10</span><b dir="ltr">'+n0(s.d10)+'</b></div><div><span>D90</span><b dir="ltr">'+n0(s.d90)+'</b></div><div><span>نواعم &lt;'+c+'</span><b>'+pc(s.fines[c]||0)+'</b></div><div><span>العدد</span><b>'+n0(s.count)+'</b></div></div>'
     +'<div class="row"><button type="button" class="btn p" data-h="brew" style="flex:1">استخدم في وصفتي</button><button type="button" class="btn" data-h="tr">ترجم</button><button type="button" class="btn" data-h="cmp">قارن</button></div></div>'
     +'<div class="hstats"><div class="card"><b>'+samples.length+'</b><span>قياس محفوظ</span></div><div class="card"><b>'+ready+'</b><span>طاحونة معايرة</span></div><div class="card"><b>'+partial+'</b><span>قيد المعايرة</span></div></div>'

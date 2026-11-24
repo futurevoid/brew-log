@@ -96,6 +96,7 @@ h1,legend,.side h2,#title,.mic .big,.btn.p{font-family:"IBM Plex Sans Arabic",Ta
 .checks li.bad{border-color:#e8c9a8}.checks li.bad::before{content:"!";color:#a5530f}
 .checks li.ok::before{content:"✓";color:var(--acc)}
 .d50row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.d50row .big{white-space:nowrap}
 .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;text-align:center}
 .stats div{display:flex;flex-direction:column;background:var(--out);border-radius:8px;padding:6px 2px}
 .stats span{font-size:12px;color:var(--mute)}

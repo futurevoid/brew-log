@@ -101,9 +101,12 @@
         overlap:sample.hist?overlap(sample,histAt(c,best)):null,outside:sample.d50<minD*0.97||sample.d50>maxD*1.03};
     }
     if(!opts.allowEst)return {blocked:true,need:c.need,settings:c.settings};
-    for(i=0;i<dial.labels.length;i++){if(!dial.uniq[i])continue;var d=Math.abs(dial.um(i)-sample.d50);if(d<bd){bd=d;best=i}}
-    return {measured:false,idx:best,setting:dial.labels[best],d50:dial.um(best),settings:c.settings,need:c.need,
-      outside:sample.d50<Math.min(dial.lo,dial.hi)*0.97||sample.d50>Math.max(dial.lo,dial.hi)*1.03};
+    // opts.um: the photo's size in chart micron (built-in or own calibration). The chart is in chart micron,
+    // so that is what it must be matched against; the raw photo D50 reads about 30% higher.
+    var u=opts.um>0?opts.um:sample.d50;
+    for(i=0;i<dial.labels.length;i++){if(!dial.uniq[i])continue;var d=Math.abs(dial.um(i)-u);if(d<bd){bd=d;best=i}}
+    return {measured:false,ref:opts.um>0,idx:best,setting:dial.labels[best],d50:dial.um(best),settings:c.settings,need:c.need,
+      outside:u<Math.min(dial.lo,dial.hi)*0.97||u>Math.max(dial.lo,dial.hi)*1.03};
   }
 
   // Straight-line fit of the grinder's chart micron against measured D50, over the calibrated settings.
@@ -169,7 +172,24 @@
     return null;
   }
 
+  // Built-in calibration: a photo's D50 (this engine, version 2) against the grinder-chart micron of the same grind.
+  // The chart micron is one scale shared by every grinder in the list, so this works for all of them: photo D50 ->
+  // chart micron here, then each grinder's own chart turns the micron into its setting. Measured on five real photos
+  // (1Zpresso Q Air 1.5.0-3.5.0, chart 510-1190 µm). Hold-one-out on the page: every photo within 2% of its chart value.
+  var REF_POINTS=[[753,510],[943,680],[1070,805],[1318,1020],[1520,1190]];
+  var refCache=null;
+  function reference(){
+    if(refCache)return refCache;
+    var xs=REF_POINTS.map(function(p){return p[0]}),ys=REF_POINTS.map(function(p){return p[1]});
+    function fit(x,y){var n=x.length,mx=0,my=0,sxy=0,sxx=0,i;for(i=0;i<n;i++){mx+=x[i]/n;my+=y[i]/n}for(i=0;i<n;i++){sxy+=(x[i]-mx)*(y[i]-my);sxx+=(x[i]-mx)*(x[i]-mx)}var b=sxy/sxx;return {a:my-b*mx,b:b}}
+    var f=fit(xs,ys),e=0;
+    for(var k=0;k<xs.length;k++){var g=fit(xs.filter(function(_,j){return j!==k}),ys.filter(function(_,j){return j!==k}));e+=Math.pow((g.a+g.b*xs[k]-ys[k])/ys[k],2)}
+    refCache={a:f.a,b:f.b,acc:100*Math.sqrt(e/xs.length),min:Math.min.apply(null,xs),max:Math.max.apply(null,xs),n:xs.length,
+      um:function(d50){return f.a+f.b*d50}};
+    return refCache;
+  }
+
   var api={MIN_SETTINGS:MIN_SETTINGS,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
-    contribution:contribution,extrapolate:extrapolate,regress:regress,wear:wear,busiest:busiest,latestPair:latestPair};
+    contribution:contribution,extrapolate:extrapolate,regress:regress,reference:reference,wear:wear,busiest:busiest,latestPair:latestPair};
   if(typeof module==="object"&&module.exports)module.exports=api;else root.GrindTranslate=api;
 })(typeof self!=="undefined"?self:this);

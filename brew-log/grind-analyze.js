@@ -4,6 +4,12 @@
 (function(root){
   var BINS=16,BIN_LO=100,BIN_HI=2000,CUTOFFS=[100,150,200];
   var NOISE_PX=3,CLUMP_SOLIDITY=0.85,CLUMP_NOTCH=0.25,SOLIDITY_MIN_AREA=30,MAX_SPLIT=60;
+  // Every photo is measured at the same pixel size (µm per pixel), so the result doesn't depend on
+  // how far away the phone was. 0 turns this off.
+  var WORK_UMPP=25,MAX_UP=2.2;
+  // Five runs per photo: the main one plus zoom (20 and 31 µm/px) and threshold (-4%, +4%) variations.
+  // On the real Q Air photos this halves the run-to-run spread of D50 (mean range over rescaled copies 1.7% -> 0.85%).
+  var DEFAULT_VARIANTS=[{work:25,tm:1},{work:20,tm:1},{work:31,tm:1},{work:25,tm:0.96},{work:25,tm:1.04}];
 
   function odd(n){n=Math.max(3,Math.round(n));return n%2?n:n+1}
 
@@ -160,6 +166,8 @@
       // Only paper counts: a dark table or plate edge around the sheet isn't a shadow on the grains.
       var ref95=percentile(bv,0.95);bv=bv.filter(function(v){return v>=0.6*ref95});
       var p50=percentile(bv,0.5)||1,shade=(percentile(bv,0.95)-percentile(bv,0.05))/p50;
+      // Anything much darker than the paper (a table, a plate rim) isn't paper: particles there aren't grains.
+      var paperMin=0.45*ref95;
       cv.resize(bgS,bg,new cv.Size(W,H),0,0,cv.INTER_LINEAR);
       cv.divide(gray,bg,flat,255);
 
@@ -177,32 +185,75 @@
         cv.bitwise_and(bin,keepM,bin);
       }
 
-      var labels=keep(new cv.Mat()),stats=keep(new cv.Mat()),cents=keep(new cv.Mat());
-      var n=cv.connectedComponentsWithStats(bin,labels,stats,cents,8,cv.CV_32S);
-      var st=stats.data32S,cd=cents.data64F,lab=labels.data32S;
-      // Second moments per blob give each grain's width (minor axis): a sieve sorts by that, not by outline area.
-      var mSx=new Float64Array(n),mSy=new Float64Array(n),mSxx=new Float64Array(n),mSyy=new Float64Array(n),mSxy=new Float64Array(n);
-      for(var py=0;py<H;py++)for(var px=0,pi=py*W;px<W;px++,pi++){var lb=lab[pi];if(lb>0){mSx[lb]+=px;mSy[lb]+=py;mSxx[lb]+=px*px;mSyy[lb]+=py*py;mSxy[lb]+=px*py}}
-      var widths=[],lengths=[];
-      var parts=[],diams=[],rej={noise:0,edge:0,clump:0},split=0,unsplit=0;
-      for(var i=1;i<n;i++){
-        var bx=st[i*5],by=st[i*5+1],bwid=st[i*5+2],bh=st[i*5+3],area=st[i*5+4];
-        if(area<NOISE_PX){rej.noise++;continue}
-        var cx=cd[i*2],cy=cd[i*2+1],rpx=Math.sqrt(area/Math.PI),status=0;
-        if(bx<=crop.x||by<=crop.y||bx+bwid>=crop.x+crop.w||by+bh>=crop.y+crop.h){rej.edge++;status=2}
-        else if(area>=SOLIDITY_MIN_AREA&&isClump(cv,lab,W,i,bx,by,bwid,bh,rpx)){
-          // Touching grains: split them (distance transform + watershed) instead of throwing them away.
-          var pieces=splitClump(cv,lab,W,i,bx,by,bwid,bh);
-          if(pieces&&pieces.length===1){diams.push(2*Math.sqrt(pieces[0].a/Math.PI)*umPerPx);var a1=axes(area,mSx[i],mSy[i],mSxx[i],mSyy[i],mSxy[i]);widths.push(a1[1]*umPerPx);lengths.push(a1[0]*umPerPx);parts.push([Math.round(cx),Math.round(cy),Math.round(rpx*10)/10,0]);continue}
-          if(pieces&&pieces.length>1&&pieces.length<=MAX_SPLIT){
-            rej.clump++;split+=pieces.length;
-            pieces.forEach(function(q){var pr=Math.sqrt(q.a/Math.PI);diams.push(2*pr*umPerPx);var aq=axes(q.a,q.sx,q.sy,q.sxx,q.syy,q.sxy);widths.push(aq[1]*umPerPx);lengths.push(aq[0]*umPerPx);parts.push([Math.round(bx+q.x),Math.round(by+q.y),Math.round(pr*10)/10,3])});
-            continue;
+      // Particle stage. It runs at a fixed working pixel size (sharpness above stays at the photo's own size)
+      // and can run several times at slightly different zoom and threshold settings: the grain-splitting and
+      // edge decisions that flip from run to run average out, so the reading is steadier.
+      function stage(work,tmul,pre){
+        var pf=1,tmp=[];
+        function own(m){tmp.push(m);return m}
+        if(work>0){var fw=umPerPx/work;if(Math.abs(fw-1)>0.04)pf=Math.min(fw,MAX_UP)}
+        var pum=umPerPx/pf,binP=bin,PW=W,PH=H,cropP=crop;
+        try{
+          if(pf!==1||tmul!==1||pre){
+            var flatP=flat;
+            if(pf!==1){PW=Math.round(W*pf);PH=Math.round(H*pf);flatP=own(new cv.Mat());cv.resize(flat,flatP,new cv.Size(PW,PH),0,0,pf<1?cv.INTER_AREA:cv.INTER_LINEAR)}
+            if(pre)flatP=preprocess(cv,flatP,pre,own);
+            binP=own(new cv.Mat());
+            cv.threshold(flatP,binP,Math.min(225,Math.max(90,t*tmul)),255,cv.THRESH_BINARY_INV);
+            cv.morphologyEx(binP,binP,cv.MORPH_OPEN,open);
+            cv.circle(binP,new cv.Point(Math.round(coin.x*pf),Math.round(coin.y*pf)),Math.round(coin.r*pf*1.25),new cv.Scalar(0),-1);
+            cropP={x:Math.round(crop.x*pf),y:Math.round(crop.y*pf),w:Math.round(crop.w*pf),h:Math.round(crop.h*pf)};
+            cropP.w=Math.min(cropP.w,PW-cropP.x);cropP.h=Math.min(cropP.h,PH-cropP.y);
+            if(o.crop){
+              var keepP=own(cv.Mat.zeros(PH,PW,cv.CV_8UC1));
+              cv.rectangle(keepP,new cv.Point(cropP.x,cropP.y),new cv.Point(cropP.x+cropP.w-1,cropP.y+cropP.h-1),new cv.Scalar(255),-1);
+              cv.bitwise_and(binP,keepP,binP);
+            }
           }
-          rej.clump++;unsplit++;status=1;
-        }
-        if(!status){diams.push(2*rpx*umPerPx);var ax=axes(area,mSx[i],mSy[i],mSxx[i],mSyy[i],mSxy[i]);widths.push(ax[1]*umPerPx);lengths.push(ax[0]*umPerPx)}
-        parts.push([Math.round(cx),Math.round(cy),Math.round(rpx*10)/10,status]);
+          var labels=own(new cv.Mat()),stats=own(new cv.Mat()),cents=own(new cv.Mat());
+          var n=cv.connectedComponentsWithStats(binP,labels,stats,cents,8,cv.CV_32S);
+          var st=stats.data32S,cd=cents.data64F,lab=labels.data32S;
+          // Second moments per blob give each grain's width (minor axis): a sieve sorts by that, not by outline area.
+          var mSx=new Float64Array(n),mSy=new Float64Array(n),mSxx=new Float64Array(n),mSyy=new Float64Array(n),mSxy=new Float64Array(n);
+          for(var py=0;py<PH;py++)for(var px=0,pi=py*PW;px<PW;px++,pi++){var lb=lab[pi];if(lb>0){mSx[lb]+=px;mSy[lb]+=py;mSxx[lb]+=px*px;mSyy[lb]+=py*py;mSxy[lb]+=px*py}}
+          var widths=[],lengths=[],parts=[],diams=[],rej={noise:0,edge:0,clump:0},unsplit=0;
+          // Overlay positions are reported in the photo's own pixels.
+          function mark(x,y,r,status){parts.push([Math.round(x/pf),Math.round(y/pf),Math.round(r/pf*10)/10,status])}
+          for(var i=1;i<n;i++){
+            var bx=st[i*5],by=st[i*5+1],bwid=st[i*5+2],bh=st[i*5+3],area=st[i*5+4];
+            if(area<NOISE_PX){rej.noise++;continue}
+            var cx=cd[i*2],cy=cd[i*2+1],rpx=Math.sqrt(area/Math.PI),status=0;
+            if(bx<=cropP.x||by<=cropP.y||bx+bwid>=cropP.x+cropP.w||by+bh>=cropP.y+cropP.h){rej.edge++;status=2}
+            else if(offPaper(cx/pf,cy/pf)){rej.edge++;status=2}
+            else if(area>=SOLIDITY_MIN_AREA&&isClump(cv,lab,PW,i,bx,by,bwid,bh,rpx)){
+              // Touching grains: split them (distance transform + watershed) instead of throwing them away.
+              var pieces=splitClump(cv,lab,PW,i,bx,by,bwid,bh);
+              if(pieces&&pieces.length===1){diams.push(2*Math.sqrt(pieces[0].a/Math.PI)*pum);var a1=axes(area,mSx[i],mSy[i],mSxx[i],mSyy[i],mSxy[i]);widths.push(a1[1]*pum);lengths.push(a1[0]*pum);mark(cx,cy,rpx,0);continue}
+              if(pieces&&pieces.length>1&&pieces.length<=MAX_SPLIT){
+                rej.clump++;
+                pieces.forEach(function(q){var pr=Math.sqrt(q.a/Math.PI);diams.push(2*pr*pum);var aq=axes(q.a,q.sx,q.sy,q.sxx,q.syy,q.sxy);widths.push(aq[1]*pum);lengths.push(aq[0]*pum);mark(bx+q.x,by+q.y,pr,3)});
+                continue;
+              }
+              rej.clump++;unsplit++;status=1;
+            }
+            if(!status){diams.push(2*rpx*pum);var ax=axes(area,mSx[i],mSy[i],mSxx[i],mSyy[i],mSxy[i]);widths.push(ax[1]*pum);lengths.push(ax[0]*pum)}
+            mark(cx,cy,rpx,status);
+          }
+          return {diams:diams,widths:widths,lengths:lengths,parts:parts,rej:rej,unsplit:unsplit};
+        }finally{tmp.forEach(function(m){m.delete()})}
+      }
+      function offPaper(x,y){var yy=Math.min(bgS.rows-1,Math.round(y*s)),xx=Math.min(bw-1,Math.round(x*s));return bd[yy*bw+xx]<paperMin}
+      var variants=o.variants||DEFAULT_VARIANTS,runs=[];
+      for(var vi=0;vi<variants.length;vi++){
+        runs.push(stage(variants[vi].work===undefined?WORK_UMPP:variants[vi].work,variants[vi].tm||1,variants[vi].pre||o.pre||null));
+        if(o.progress)o.progress(vi+1,variants.length);
+      }
+      var main=runs[0],diams=main.diams,widths=main.widths,lengths=main.lengths,parts=main.parts,rej=main.rej,unsplit=main.unsplit;
+      // Pool the runs: each grain counts 1/runs, so counts stay those of one photo.
+      var pooled=diams,weights=null;
+      if(runs.length>1){
+        pooled=[];weights=[];
+        runs.forEach(function(r){for(var q=0;q<r.diams.length;q++){pooled.push(r.diams[q]);weights.push(1/runs.length)}});
       }
 
       var sharp=sharpness(cv,flat,bin,crop,open,keep);
@@ -214,8 +265,19 @@
       if(unsplit/Math.max(1,diams.length+unsplit)>0.30)warnings.push("clumps");
       if(shade>0.38)warnings.push("shadow");
       return {ok:true,width:W,height:H,coin:coin,coinMm:coinMm,umPerPx:umPerPx,crop:o.crop?crop:null,
-        diameters:diams,widths:widths,lengths:lengths,particles:parts,rejects:rej,threshold:t,sharpness:sharp,shade:shade,warnings:warnings};
+        diameters:pooled,weights:weights,widths:widths,lengths:lengths,particles:parts,rejects:rej,threshold:t,sharpness:sharp,shade:shade,warnings:warnings,
+        runs:o.debug?runs.map(function(r){return r.diams}):undefined};
     }finally{mats.forEach(function(m){m.delete()})}
+  }
+
+  // Optional cleanup of the (flat-fielded) working image before thresholding. Returns a new Mat.
+  // pre: {g: gaussian sigma (denoise), b: bilateral denoise strength, u: [sigma, amount] unsharp mask}
+  function preprocess(cv,src,pre,own){
+    var cur=own(src.clone());
+    if(pre.g){var gk=odd(pre.g*6);cv.GaussianBlur(cur,cur,new cv.Size(gk,gk),pre.g)}
+    if(pre.b){var tmpb=own(new cv.Mat());cv.bilateralFilter(cur,tmpb,7,pre.b,3);cur=tmpb}
+    if(pre.u){var bl=own(new cv.Mat()),uk=odd(pre.u[0]*6);cv.GaussianBlur(cur,bl,new cv.Size(uk,uk),pre.u[0]);cv.addWeighted(cur,1+pre.u[1],bl,-pre.u[1],0,cur)}
+    return cur;
   }
 
   // Length and width (full axes, px) of the ellipse with the same second moments as a blob.
@@ -248,9 +310,9 @@
       var mkd=mk.data32S,bgLabel=nl,md2=m.data;
       for(var j=0;j<mkd.length;j++)if(!md2[j])mkd[j]=bgLabel;
       // Watershed image: grain interiors dark, borders bright.
-      var im=new Uint8Array(mw*mh*3);
+      img3.delete();img3=new cv.Mat(mh,mw,cv.CV_8UC3);
+      var im=img3.data;
       for(var q=0;q<dd.length;q++){var v=255-Math.round(dd[q]/mx*255);im[q*3]=v;im[q*3+1]=v;im[q*3+2]=v}
-      img3=cv.matFromArray(mh,mw,cv.CV_8UC3,Array.prototype.slice.call(im));
       cv.watershed(img3,mk);
       var sa=new Float64Array(nl),sx=new Float64Array(nl),sy=new Float64Array(nl),sxx=new Float64Array(nl),syy=new Float64Array(nl),sxy=new Float64Array(nl),w=mk.data32S;
       for(var yy=0;yy<mh;yy++)for(var xx=0;xx<mw;xx++){var l=w[yy*mw+xx];if(l>0&&l<bgLabel&&md2[yy*mw+xx]){sa[l]++;sx[l]+=xx;sy[l]+=yy;sxx[l]+=xx*xx;syy[l]+=yy*yy;sxy[l]+=xx*yy}}
@@ -304,14 +366,24 @@
     return clump;
   }
 
-  // Volume-weighted statistics over one or more photos' particle diameters (µm).
+  // Volume-weighted statistics over one or more photos' particle diameters (µm). Each list is an array of
+  // diameters or {d, w}: diameters with a weight per grain (several runs pooled at 1/runs each).
   function summarize(lists){
-    var d=[];lists.forEach(function(l){for(var i=0;i<l.length;i++)d.push(l[i])});
-    d.sort(function(a,b){return a-b});
-    var n=d.length,out={count:n,d10:0,d50:0,d90:0,fines:{},hist:[],under:0,over:0,edges:edges()};
+    var d=[],w=[],any=false;
+    lists.forEach(function(l){
+      var dd=l.d||l,ww=l.w||null;
+      for(var i=0;i<dd.length;i++){d.push(dd[i]);w.push(ww?ww[i]:1);if(ww)any=true}
+    });
+    var n=d.length,ord=new Array(n),i0;
+    for(i0=0;i0<n;i0++)ord[i0]=i0;
+    ord.sort(function(a,b){return d[a]-d[b]});
+    var ds=new Array(n),ws=new Array(n),cnt=0;
+    for(i0=0;i0<n;i0++){ds[i0]=d[ord[i0]];ws[i0]=w[ord[i0]];cnt+=ws[i0]}
+    d=ds;w=ws;
+    var out={count:Math.round(cnt),d10:0,d50:0,d90:0,fines:{},hist:[],under:0,over:0,edges:edges()};
     CUTOFFS.forEach(function(c){out.fines[c]=0});
     if(!n){for(var z=0;z<BINS;z++)out.hist.push(0);return out}
-    var v=d.map(function(x){return x*x*x}),tot=v.reduce(function(a,b){return a+b},0),cum=0,q=[0.1,0.5,0.9],qi=0,res=[];
+    var v=d.map(function(x,i){return w[i]*x*x*x}),tot=v.reduce(function(a,b){return a+b},0),cum=0,q=[0.1,0.5,0.9],qi=0,res=[];
     for(var i=0;i<n&&qi<3;i++){
       var prev=cum;cum+=v[i];
       while(qi<3&&cum/tot>=q[qi]){
@@ -321,7 +393,6 @@
     }
     out.d10=res[0];out.d50=res[1];out.d90=res[2];
     var h=[];for(var b=0;b<BINS;b++)h.push(0);
-    var e=out.edges;
     for(var j=0;j<n;j++){
       CUTOFFS.forEach(function(c){if(d[j]<c)out.fines[c]+=v[j]});
       if(d[j]<BIN_LO)out.under+=v[j];else if(d[j]>=BIN_HI)out.over+=v[j];

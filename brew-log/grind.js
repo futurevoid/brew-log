@@ -69,6 +69,7 @@ function engine(){
       var m=e.data;
       if(m.type==="ready")res();
       else if(m.type==="error"){wReady=null;worker.terminate();rej(new Error(m.message))}
+      else if(m.type==="progress"){status("جاري التحليل… "+n0(m.done)+" من "+n0(m.total))}
       else if(m.type==="result"&&jobs[m.id]){jobs[m.id](m.res);delete jobs[m.id]}
     };
     worker.onerror=function(e){wReady=null;rej(new Error(e.message||"worker"))};
@@ -88,6 +89,7 @@ function runAnalysis(opts){
 // ---------- photo + session ----------
 var img=null,cur=null,photoIdx=0,res=null,mode=null,fix=null,crop=null,addingSpread=false,showAnyway=false;
 var MAXSIDE=4032;
+var ENGINE=2; // measuring method of the saved numbers (2 = five runs per photo, fixed working pixel size)
 function status(t){$("status").textContent=t||""}
 function newSession(){cur={id:"g"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),photos:[],sample:null};photoIdx=0}
 
@@ -119,7 +121,7 @@ function analyze(){
   if(fix)opts.coin={x:fix.x,y:fix.y,r:fix.r};
   if(crop&&crop.w>20&&crop.h>20)opts.crop=crop;
   $("results").hidden=true;$("retake").hidden=true;
-  status("جاري التحليل…");
+  status("نحلّل الصورة خمس مرات ونأخذ المتوسط لأعلى دقة…");
   runAnalysis(opts).then(onResult,function(err){status("ما قدرنا نحمّل محرك التحليل. افتح الصفحة مع إنترنت أول مرة، وبعدها تشتغل بدونه.")});
 }
 
@@ -137,15 +139,16 @@ function onResult(r){
     status("صار خطأ في التحليل"+(r.message?": "+r.message:""));return;
   }
   res=r;fix=fix&&r.coin.manual?fix:null;
-  cur.photos[photoIdx]={diams:r.diameters,warnings:r.warnings,rejects:r.rejects,umPerPx:r.umPerPx};
-  var lists=cur.photos.map(function(p){return p.diams}),S=GrindAnalyze.summarize(lists);
+  res.nGrains=GrindAnalyze.summarize([r.weights?{d:r.diameters,w:r.weights}:r.diameters]).count;
+  cur.photos[photoIdx]={diams:r.diameters,wts:r.weights,warnings:r.warnings,rejects:r.rejects,umPerPx:r.umPerPx};
+  var lists=cur.photos.map(function(p){return p.wts?{d:p.diams,w:p.wts}:p.diams}),S=GrindAnalyze.summarize(lists);
   var warns={};cur.photos.forEach(function(p){p.warnings.forEach(function(w){if(w!=="few")warns[w]=1})});
   if(S.count<200)warns.few=1;
   var rej={noise:0,edge:0,clump:0};cur.photos.forEach(function(p){for(var k in rej)rej[k]+=p.rejects[k]});
   var prev=cur.sample||{};
   cur.sample={id:cur.id,t:cur.t,coinMm:coinMm(),umpp:Math.round(r.umPerPx*10)/10,spreads:cur.photos.length,count:S.count,rejects:rej,
     d10:Math.round(S.d10),d50:Math.round(S.d50),d90:Math.round(S.d90),fines:S.fines,hist:S.hist,under:S.under,over:S.over,
-    warnings:Object.keys(warns),grinder:prev.grinder||null,idx:prev.idx!=null?prev.idx:null,setting:prev.setting||null,calib:prev.calib!==false};
+    warnings:Object.keys(warns),pv:ENGINE,grinder:prev.grinder||null,idx:prev.idx!=null?prev.idx:null,setting:prev.setting||null,calib:prev.calib!==false};
   upsert(cur.sample);selId=cur.id;
   status("");draw();renderSpreads();renderResult();
 }
@@ -212,7 +215,7 @@ function renderResult(){
   var c=cutoff();
   headline(s);
   var q=$("rQual");
-  if(s.umpp){q.textContent="دقة الصورة: كل بكسل ≈ "+s.umpp+" µm · "+n0(s.count)+" حبيبة"+(s.umpp>30?" · قرّب الجوال شوي (الصورة تغطي ٨–١٠ سم) لقياس أدق":"");q.hidden=false}else q.hidden=true;
+  if(s.umpp){q.textContent="دقة الصورة: كل بكسل ≈ "+s.umpp+" µm · "+n0(s.count)+" حبيبة"+(s.pv>=2?" · متوسط ٥ قياسات للصورة":"")+(s.umpp>30?" · قرّب الجوال شوي (الصورة تغطي ٨–١٠ سم) لقياس أدق":"");q.hidden=false}else q.hidden=true;
   $("rD10").textContent=n0(s.d10);$("rD90").textContent=n0(s.d90);
   $("rFinesL").textContent="نواعم <"+c;$("rFines").textContent=pc(s.fines[c]||0);$("rCount").textContent=n0(s.count);
   $("rBars").innerHTML=bars([s],["a"]);
@@ -239,7 +242,7 @@ function draw(){
     res.particles.forEach(function(p){ctx.beginPath();ctx.strokeStyle=cols[p[3]];ctx.lineWidth=lw;if(p[3]&&p[3]!==3)ctx.setLineDash([3,2]);else ctx.setLineDash([]);ctx.arc(p[0]*dScale,p[1]*dScale,Math.max(2.5,p[2]*dScale+lw),0,7);ctx.stroke()});
     ctx.setLineDash([]);
     var c=res.coin;ctx.beginPath();ctx.strokeStyle="#1f7fa8";ctx.lineWidth=lw*2;ctx.arc(c.x*dScale,c.y*dScale,c.r*dScale,0,7);ctx.stroke();
-    $("phChip").textContent=n0(res.diameters.length)+" حبيبة · "+n0(res.rejects.clump+res.rejects.edge)+" مرفوضة";$("phChip").hidden=false;
+    $("phChip").textContent=n0(res.nGrains)+" حبيبة · "+n0(res.rejects.clump+res.rejects.edge)+" مرفوضة";$("phChip").hidden=false;
   }else $("phChip").hidden=true;
   if(mode==="coin"&&fix){
     ctx.beginPath();ctx.fillStyle="rgba(31,127,168,.12)";ctx.strokeStyle="#1f7fa8";ctx.lineWidth=lw*2;ctx.arc(fix.x*dScale,fix.y*dScale,fix.r*dScale,0,7);ctx.fill();ctx.stroke();

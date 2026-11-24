@@ -23,10 +23,12 @@ self.onmessage=function(e){
   if(m.type==="analyze"){
     load().then(function(w){
       var img={data:new Uint8ClampedArray(m.buffer),width:m.width,height:m.height};
-      var r=GrindAnalyze.analyzeImage(w.cv,img,m.opts);
-      var d=r.ok?new Float32Array(r.diameters):new Float32Array(0);
-      if(r.ok)r.diameters=d;
-      postMessage({type:"result",id:m.id,res:r},[d.buffer]);
+      var opts=m.opts||{};
+      opts.progress=function(done,total){postMessage({type:"progress",id:m.id,done:done,total:total})};
+      var r=GrindAnalyze.analyzeImage(w.cv,img,opts);
+      var d=r.ok?new Float32Array(r.diameters):new Float32Array(0),wt=r.ok&&r.weights?new Float32Array(r.weights):null,tr=[d.buffer];
+      if(r.ok){r.diameters=d;r.weights=wt;if(wt)tr.push(wt.buffer)}
+      postMessage({type:"result",id:m.id,res:r},tr);
     }).catch(function(err){postMessage({type:"result",id:m.id,res:{ok:false,error:"engine",message:String(err&&err.message||err)}})});
   }
 };

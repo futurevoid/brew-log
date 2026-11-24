@@ -127,7 +127,7 @@ function run(cv){
   check("blurry photo warned",rbl.ok&&rbl.warnings.indexOf("blurry")>=0,rbl.ok?"sharp="+rbl.sharpness.toFixed(0)+" ["+rbl.warnings+"]":rbl.error);
   var cl=makePhoto(cv,{coinMm:23,coinR:420,median:600,sigma:0.35,count:700,seed:5,clumps:true});
   var rcl=GA.analyzeImage(cv,cl.img,{coinMm:23});
-  check("clumps found and split, no clump warning",rcl.ok&&rcl.rejects.clump>100&&rcl.warnings.indexOf("clumps")<0,rcl.ok?"clumps="+rcl.rejects.clump+" ["+rcl.warnings+"]":rcl.error);
+  check("clumps found and split, none rejected, no clump warning",rcl.ok&&rcl.rejects.split>100&&rcl.rejects.clump<10&&rcl.warnings.indexOf("clumps")<0,rcl.ok?"split="+rcl.rejects.split+" rejected="+rcl.rejects.clump+" ["+rcl.warnings+"]":rcl.error);
   if(rcl.ok){var gcl=GA.summarize([L(rcl)]),tcl=GA.summarize([cl.truth]);check("split clumps keep D50 within 8%",Math.abs(pct(gcl.d50,tcl.d50))<8,gcl.d50.toFixed(0)+" vs "+tcl.d50.toFixed(0))}
   var far=makePhoto(cv,{coinMm:23,coinR:150,median:900,sigma:0.4,count:600,seed:9});
   var rf=GA.analyzeImage(cv,far.img,{coinMm:23});

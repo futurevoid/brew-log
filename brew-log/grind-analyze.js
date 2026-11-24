@@ -4,6 +4,8 @@
 (function(root){
   var BINS=16,BIN_LO=100,BIN_HI=2000,CUTOFFS=[100,150,200];
   var NOISE_PX=3,CLUMP_SOLIDITY=0.85,CLUMP_NOTCH=0.25,SOLIDITY_MIN_AREA=30,MAX_SPLIT=60;
+  // Lumpy blobs that can't be split are left out. Measuring them whole (or after a finer split) was tried on the
+  // real Q Air photos: it made the calibration less straight (hold-one-out 1.7% -> 2.2-2.3% rms), so they stay out.
   // Every photo is measured at the same pixel size (µm per pixel), so the result doesn't depend on
   // how far away the phone was. 0 turns this off.
   var WORK_UMPP=25,MAX_UP=2.2;
@@ -216,7 +218,8 @@
           // Second moments per blob give each grain's width (minor axis): a sieve sorts by that, not by outline area.
           var mSx=new Float64Array(n),mSy=new Float64Array(n),mSxx=new Float64Array(n),mSyy=new Float64Array(n),mSxy=new Float64Array(n);
           for(var py=0;py<PH;py++)for(var px=0,pi=py*PW;px<PW;px++,pi++){var lb=lab[pi];if(lb>0){mSx[lb]+=px;mSy[lb]+=py;mSxx[lb]+=px*px;mSyy[lb]+=py*py;mSxy[lb]+=px*py}}
-          var widths=[],lengths=[],parts=[],diams=[],rej={noise:0,edge:0,clump:0},unsplit=0;
+          // rej.clump counts only clumps left out; rej.split counts clumps split into grains (those are measured).
+          var widths=[],lengths=[],parts=[],diams=[],rej={noise:0,edge:0,clump:0,split:0},unsplit=0;
           // Overlay positions are reported in the photo's own pixels.
           function mark(x,y,r,status){parts.push([Math.round(x/pf),Math.round(y/pf),Math.round(r/pf*10)/10,status])}
           for(var i=1;i<n;i++){
@@ -230,7 +233,7 @@
               var pieces=splitClump(cv,lab,PW,i,bx,by,bwid,bh);
               if(pieces&&pieces.length===1){diams.push(2*Math.sqrt(pieces[0].a/Math.PI)*pum);var a1=axes(area,mSx[i],mSy[i],mSxx[i],mSyy[i],mSxy[i]);widths.push(a1[1]*pum);lengths.push(a1[0]*pum);mark(cx,cy,rpx,0);continue}
               if(pieces&&pieces.length>1&&pieces.length<=MAX_SPLIT){
-                rej.clump++;
+                rej.split++;
                 pieces.forEach(function(q){var pr=Math.sqrt(q.a/Math.PI);diams.push(2*pr*pum);var aq=axes(q.a,q.sx,q.sy,q.sxx,q.syy,q.sxy);widths.push(aq[1]*pum);lengths.push(aq[0]*pum);mark(bx+q.x,by+q.y,pr,3)});
                 continue;
               }

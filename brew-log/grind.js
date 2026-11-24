@@ -143,7 +143,7 @@ function onResult(r){
   if(S.count<200)warns.few=1;
   var rej={noise:0,edge:0,clump:0};cur.photos.forEach(function(p){for(var k in rej)rej[k]+=p.rejects[k]});
   var prev=cur.sample||{};
-  cur.sample={id:cur.id,t:cur.t,coinMm:coinMm(),spreads:cur.photos.length,count:S.count,rejects:rej,
+  cur.sample={id:cur.id,t:cur.t,coinMm:coinMm(),umpp:Math.round(r.umPerPx*10)/10,spreads:cur.photos.length,count:S.count,rejects:rej,
     d10:Math.round(S.d10),d50:Math.round(S.d50),d90:Math.round(S.d90),fines:S.fines,hist:S.hist,under:S.under,over:S.over,
     warnings:Object.keys(warns),grinder:prev.grinder||null,idx:prev.idx!=null?prev.idx:null,setting:prev.setting||null,calib:prev.calib!==false};
   upsert(cur.sample);selId=cur.id;
@@ -155,15 +155,29 @@ function onResult(r){
 function eqInfo(s){
   var k=s.grinder||lsGet(LASTG,"");if(!k)return null;
   var c=GrindTranslate.curve(samples,k);if(!c.ready)return null;
-  var d=Micron.dial(k),t=GrindTranslate.translate(s,k,d,samples,{allowEst:false});
+  var d=Micron.dial(k),r=GrindTranslate.regress(samples,k,d);
+  // Preferred: straight-line fit of chart micron vs measured D50 (smooths photo-to-photo noise).
+  if(r&&r.acc<=8){
+    var lo=r.min*0.7,hi=r.max*1.3;
+    if(s.d50<lo||s.d50>hi)return {k:k,um:null,setting:null,acc:r.acc,outside:true};
+    var um=Math.max(Math.min(d.lo,d.hi),Math.min(Math.max(d.lo,d.hi),r.um(s.d50))),best=-1,bd=Infinity;
+    for(var i=0;i<d.labels.length;i++){if(!d.uniq[i])continue;var dv=Math.abs(d.um(i)-um);if(dv<bd){bd=dv;best=i}}
+    return {k:k,um:um,setting:d.labels[best],acc:r.acc,outside:false,extrap:s.d50<r.min||s.d50>r.max};
+  }
+  var t=GrindTranslate.translate(s,k,d,samples,{allowEst:false});
   if(!t||t.blocked||t.idx==null)return null;
-  return {k:k,um:d.um(t.idx),setting:t.setting,acc:c.acc,outside:!!t.outside};
+  if(t.outside){
+    var x=GrindTranslate.extrapolate(s,k,d,samples);
+    if(x)return {k:k,um:d.um(x.idx),setting:x.setting,acc:null,outside:false,extrap:true};
+    return {k:k,um:d.um(t.idx),setting:t.setting,acc:c.acc,outside:true};
+  }
+  return {k:k,um:d.um(t.idx),setting:t.setting,acc:c.acc,outside:false};
 }
 function headline(s){
   var e=eqInfo(s),raw="قياس الصورة الفعلي: D50 "+n0(s.d50)+" µm";
   if(e&&!e.outside){
     $("rD50").textContent="≈ "+n0(e.um)+" µm";
-    $("rD50L").textContent="على سلّم "+gname(e.k)+(e.acc!=null?" · ±"+e.acc.toFixed(e.acc<1?1:0)+"%":"");
+    $("rD50L").textContent="على سلّم "+gname(e.k)+(e.extrap?" · تقدير خارج المعايرة":e.acc!=null?" · ±"+e.acc.toFixed(e.acc<1?1:0)+"%":"");
     $("rRaw").textContent=raw+" · الإعداد التقريبي "+e.setting+"  (D10 وD90 وباقي الأرقام مقاسة من الصورة مباشرة)";
   }else{
     $("rD50").textContent="≈ "+n0(s.d50)+" µm";$("rD50L").textContent="D50 · الحجم الأوسط";
@@ -197,6 +211,8 @@ function renderResult(){
   quickFill(s);
   var c=cutoff();
   headline(s);
+  var q=$("rQual");
+  if(s.umpp){q.textContent="دقة الصورة: كل بكسل ≈ "+s.umpp+" µm · "+n0(s.count)+" حبيبة"+(s.umpp>30?" · قرّب الجوال شوي (الصورة تغطي ٨–١٠ سم) لقياس أدق":"");q.hidden=false}else q.hidden=true;
   $("rD10").textContent=n0(s.d10);$("rD90").textContent=n0(s.d90);
   $("rFinesL").textContent="نواعم <"+c;$("rFines").textContent=pc(s.fines[c]||0);$("rCount").textContent=n0(s.count);
   $("rBars").innerHTML=bars([s],["a"]);
@@ -330,9 +346,9 @@ function quickSet(){
 }
 function quickInfo(s){
   var el=$("qOut");if(!s||!s.grinder){el.textContent="";return}
-  var c=GrindTranslate.contribution(samples,s).after;
-  var t=GrindTranslate.translate(s,s.grinder,Micron.dial(s.grinder),samples,{allowEst:false});
-  if(c.ready&&!t.blocked&&t.idx!=null){var um=Micron.dial(s.grinder).um(t.idx);el.textContent="≈ "+n0(um)+" µm على سلّم "+gname(s.grinder)+" (إعداد تقريبي "+t.setting+") · ±"+(c.acc!=null?c.acc.toFixed(0)+"%":"؟")}
+  var c=GrindTranslate.contribution(samples,s).after,e=c.ready?eqInfo(s):null;
+  if(e&&!e.outside)el.textContent="≈ "+n0(e.um)+" µm على سلّم "+gname(s.grinder)+" (إعداد تقريبي "+e.setting+") · "+(e.extrap?"تقدير خارج المعايرة":"±"+(e.acc!=null?e.acc.toFixed(0)+"%":"؟"));
+  else if(c.ready)el.textContent="هذي الطحنة خارج مدى معايرة "+gname(s.grinder);
   else el.textContent="انحسبت في المعايرة · "+c.settings+" من "+GrindTranslate.MIN_SETTINGS+" إعدادات لتفعيل الترجمة الدقيقة";
 }
 function quickFill(s){

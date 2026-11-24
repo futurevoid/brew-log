@@ -86,5 +86,14 @@ check("busiest grinder+setting",T.busiest(H).idx===24&&T.busiest(H).count===3);
 var lp=T.latestPair(H);
 check("latest vs previous at same setting",lp&&lp[0].t===400&&lp[1].t===200);
 
+
+// Real measurements: five 1Zpresso Q Air photos at 1.5.0, 2.0.0, 2.3.2, 3.0.0, 3.5.0 (chart 510..1190 um).
+var QA=M.find("1Zpresso Q Air"),dQA=M.dial(QA),qS=[];
+[["1.5.0",751],["2.0.0",951],["2.3.2",1074],["3.0.0",1369],["3.5.0",1529]].forEach(function(p){var r=M.calc(QA,p[0]);qS.push(sample(QA,Math.round(r.i),p[1]))});
+var rg=T.regress(qS,QA,dQA);
+check("Q Air regression ready",!!rg&&rg.n===5,rg?"leave-one-out ±"+rg.acc.toFixed(1)+"%":"");
+check("Q Air regression leave-one-out under 4%",rg&&rg.acc<4);
+check("Q Air 2.3.2 photo reads about 805 um",rg&&Math.abs(rg.um(1074)-805)/805<0.04,rg?rg.um(1074).toFixed(0):"");
+check("regression needs the minimum settings",T.regress(qS.slice(0,3),QA,dQA)===null);
 console.log(fails?fails+" failed":"all passed");
 process.exit(fails?1:0);

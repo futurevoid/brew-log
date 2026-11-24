@@ -106,6 +106,44 @@
       outside:sample.d50<Math.min(dial.lo,dial.hi)*0.97||sample.d50>Math.max(dial.lo,dial.hi)*1.03};
   }
 
+  // Straight-line fit of the grinder's chart micron against measured D50, over the calibrated settings.
+  // Smoother than joining the points (each photo carries a few % of noise) and it extends a little past the
+  // ends. acc = leave-one-out error (%) of the chart micron, ends included. Needs MIN_SETTINGS settings.
+  function regress(samples,key,dial){
+    var c=curve(samples,key);if(!c.ready)return null;
+    var xs=c.pts.map(function(p){return p.d50}),ys=c.pts.map(function(p){return dial.um(p.i)});
+    function fit(x,y){
+      var n=x.length,mx=x.reduce(function(a,b){return a+b},0)/n,my=y.reduce(function(a,b){return a+b},0)/n,sxy=0,sxx=0;
+      for(var i=0;i<n;i++){sxy+=(x[i]-mx)*(y[i]-my);sxx+=(x[i]-mx)*(x[i]-mx)}
+      if(!sxx)return null;var b=sxy/sxx;return {a:my-b*mx,b:b};
+    }
+    var f=fit(xs,ys);if(!f||!(f.b>0))return null;
+    var e=0;
+    for(var k=0;k<xs.length;k++){
+      var g=fit(xs.filter(function(_,j){return j!==k}),ys.filter(function(_,j){return j!==k}));
+      if(!g)return null;
+      var pr=g.a+g.b*xs[k];e+=Math.pow((pr-ys[k])/ys[k],2);
+    }
+    return {a:f.a,b:f.b,acc:100*Math.sqrt(e/xs.length),min:Math.min.apply(null,xs),max:Math.max.apply(null,xs),n:xs.length,
+      um:function(d50){return f.a+f.b*d50}};
+  }
+
+  // A photo just past the calibrated range: continue the line through the two nearest calibrated settings.
+  // Only up to EXTRAP of D50 beyond the end; further out the answer is "outside the range".
+  var EXTRAP=0.3;
+  function extrapolate(sample,key,dial,samples){
+    var c=curve(samples,key);if(!c.ready)return null;
+    var p=c.pts,n=p.length,d=sample.d50,lo=p[0],hi=p[n-1],a,b;
+    if(d<lo.d50&&d>=lo.d50*(1-EXTRAP)){a=p[0];b=p[1]}
+    else if(d>hi.d50&&d<=hi.d50*(1+EXTRAP)){a=p[n-2];b=p[n-1]}
+    else return null;
+    var slope=(b.d50-a.d50)/(b.i-a.i);if(!(slope>0))return null;
+    var fi=a.i+(d-a.d50)/slope,best=-1,bd=Infinity;
+    if(fi<0||fi>dial.labels.length-1)return null;
+    for(var i=0;i<dial.labels.length;i++){if(!dial.uniq[i])continue;var dv=Math.abs(i-fi);if(dv<bd){bd=dv;best=i}}
+    return {idx:fi,setting:dial.labels[best],extrapolated:true};
+  }
+
   // What counting this sample does to its grinder's calibration (before/after accuracy).
   function contribution(samples,sample){
     if(!sample.grinder||sample.idx==null)return null;
@@ -132,6 +170,6 @@
   }
 
   var api={MIN_SETTINGS:MIN_SETTINGS,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
-    contribution:contribution,wear:wear,busiest:busiest,latestPair:latestPair};
+    contribution:contribution,extrapolate:extrapolate,regress:regress,wear:wear,busiest:busiest,latestPair:latestPair};
   if(typeof module==="object"&&module.exports)module.exports=api;else root.GrindTranslate=api;
 })(typeof self!=="undefined"?self:this);

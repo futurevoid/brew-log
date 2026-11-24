@@ -124,7 +124,7 @@ function analyze(){
 }
 
 var CHECKS={coin_small:["العملة صغيرة بالصورة","قرّب الجوال: الصورة تغطي ٨–١٠ سم بس."],blurry:["الصورة مو واضحة","ثبّت الجوال وخلّه يركّز على البن قبل التصوير."],
-  few:["حبيبات قليلة","نحتاج ٥٠٠ حبيبة على الأقل. زد البن شوي، أو أضف فرشة ثانية."],clumps:["كتل كثيرة","افرش البن أخف عشان الحبيبات ما تلزق في بعض."],
+  few:["حبيبات قليلة","الأفضل ٢٠٠ حبيبة أو أكثر. زد البن شوي، أو أضف فرشة ثانية."],clumps:["كتل كثيرة","افرش البن أخف عشان الحبيبات ما تلزق في بعض."],
   shadow:["فيه ظل على الورقة","غيّر مكان الإضاءة أو ابعد يدك عن الضوء."]};
 var PASS={coin_small:"حجم العملة تمام",blurry:"الوضوح تمام",few:"عدد الحبيبات كافي",clumps:"الكتل قليلة",shadow:"الإضاءة متساوية"};
 
@@ -140,7 +140,7 @@ function onResult(r){
   cur.photos[photoIdx]={diams:r.diameters,warnings:r.warnings,rejects:r.rejects,umPerPx:r.umPerPx};
   var lists=cur.photos.map(function(p){return p.diams}),S=GrindAnalyze.summarize(lists);
   var warns={};cur.photos.forEach(function(p){p.warnings.forEach(function(w){if(w!=="few")warns[w]=1})});
-  if(S.count<500)warns.few=1;
+  if(S.count<200)warns.few=1;
   var rej={noise:0,edge:0,clump:0};cur.photos.forEach(function(p){for(var k in rej)rej[k]+=p.rejects[k]});
   var prev=cur.sample||{};
   cur.sample={id:cur.id,t:cur.t,coinMm:coinMm(),spreads:cur.photos.length,count:S.count,rejects:rej,
@@ -160,8 +160,11 @@ function renderSpreads(){
 
 function renderResult(){
   var s=cur&&cur.sample;if(!s)return;
-  var bad=s.warnings.length&&!showAnyway;
+  var hard=s.count<80,bad=s.warnings.length>0&&(hard?!showAnyway:true);
   $("retake").hidden=!bad;
+  $("retake").querySelector("h2").textContent=hard?"الصورة تحتاج إعادة":"ملاحظات على الصورة";
+  $("retake").querySelector("p").textContent=hard?"النتيجة بتكون غير دقيقة. هذي الأشياء اللي لقيناها:":"النتيجة ظهرت، بس هذي ملاحظات ممكن تحسّن الدقة:";
+  $("showAnyway").hidden=!hard;
   if(bad){
     $("checks").innerHTML=Object.keys(CHECKS).map(function(k){
       var f=s.warnings.indexOf(k)>=0,t=f?CHECKS[k]:[PASS[k],""];
@@ -169,7 +172,7 @@ function renderResult(){
     }).join("");
     if(!lsGet("grind-guide-fail-shown",0)){lsSet("grind-guide-fail-shown",1)}
   }
-  $("results").hidden=bad;
+  $("results").hidden=hard&&bad;
   var c=cutoff();
   $("rD50").textContent="≈ "+n0(s.d50)+" µm";$("rD10").textContent=n0(s.d10);$("rD90").textContent=n0(s.d90);
   $("rFinesL").textContent="نواعم <"+c;$("rFines").textContent=pc(s.fines[c]||0);$("rCount").textContent=n0(s.count);

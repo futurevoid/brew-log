@@ -145,11 +145,11 @@
       var sharp=sharpness(cv,flat,bin,crop,open,keep);
 
       var warnings=[];
-      if(umPerPx>30)warnings.push("coin_small");
-      if(sharp<25)warnings.push("blurry");
-      if(diams.length<300)warnings.push("few");
-      if(rej.clump/Math.max(1,diams.length+rej.clump)>0.15)warnings.push("clumps");
-      if(shade>0.35)warnings.push("shadow");
+      if(umPerPx>45)warnings.push("coin_small");
+      if(sharp<12)warnings.push("blurry");
+      if(diams.length<150)warnings.push("few");
+      if(rej.clump/Math.max(1,diams.length+rej.clump)>0.30)warnings.push("clumps");
+      if(shade>0.45)warnings.push("shadow");
       return {ok:true,width:W,height:H,coin:coin,coinMm:coinMm,umPerPx:umPerPx,crop:o.crop?crop:null,
         diameters:diams,particles:parts,rejects:rej,threshold:t,sharpness:sharp,shade:shade,warnings:warnings};
     }finally{mats.forEach(function(m){m.delete()})}

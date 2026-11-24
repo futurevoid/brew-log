@@ -1,6 +1,6 @@
-// Offline support: the site's own files are fetched fresh when online and served from cache when
+// Offline support: the site's own files are fetched fresh (always checked with the server) when online and served from cache when
 // not; the 9 MB OpenCV.js file is versioned, so it is cached once and served from cache after that.
-var CACHE="brewlog-v1";
+var CACHE="brewlog-v2";
 var CV_URL="https://docs.opencv.org/4.10.0/opencv.js";
 var SHELL=["./","index.html","grind.html","style.css","script.js","grind.js","grind-worker.js","grind-analyze.js","grind-translate.js","grinders.js","micron.js"];
 
@@ -20,7 +20,10 @@ self.addEventListener("fetch",function(e){
     return;
   }
   if(url.origin!==self.location.origin)return;
-  e.respondWith(fetch(req).then(function(r){
+  // cache:"no-cache" asks the server every time (a quick "not modified" when nothing changed): some servers send
+  // no cache headers, and the phone would otherwise keep old files for hours after an update.
+  var fresh=req.mode==="navigate"?fetch(req.url,{cache:"no-cache",credentials:"same-origin"}):fetch(req,{cache:"no-cache"});
+  e.respondWith(fresh.then(function(r){
     if(r.ok){var copy=r.clone();caches.open(CACHE).then(function(c){c.put(req,copy)})}
     return r;
   }).catch(function(){return caches.match(req,{ignoreSearch:true})}));

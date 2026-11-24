@@ -90,6 +90,9 @@ function runAnalysis(opts){
 var img=null,cur=null,photoIdx=0,res=null,mode=null,fix=null,crop=null,addingSpread=false,showAnyway=false;
 var MAXSIDE=4032;
 var ENGINE=2; // measuring method of the saved numbers (2 = five runs per photo, fixed working pixel size)
+// Shown at the bottom of the page, so it is easy to see which version a phone is running.
+var APP_VER="2026-11-24 · built-in calibration";
+try{$("appVer").textContent="v "+APP_VER+(GrindTranslate.reference?"":" · old files")}catch(e){}
 function status(t){$("status").textContent=t||""}
 function newSession(){cur={id:"g"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),photos:[],sample:null};photoIdx=0}
 

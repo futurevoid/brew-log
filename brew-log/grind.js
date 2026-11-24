@@ -93,7 +93,7 @@ var img=null,cur=null,photoIdx=0,res=null,mode=null,fix=null,crop=null,addingSpr
 var MAXSIDE=4032;
 var ENGINE=2; // measuring method of the saved numbers (2 = five runs per photo, fixed working pixel size)
 // Shown at the bottom of the page, so it is easy to see which version a phone is running.
-var APP_VER="2026-11-24 · built-in calibration · 5 coins";
+var APP_VER="2026-11-24 · built-in calibration · 5 coins · true rejected count";
 try{$("appVer").textContent="v "+APP_VER+(GrindTranslate.reference?"":" · old files")}catch(e){}
 function status(t){$("status").textContent=t||""}
 function newSession(){cur={id:"g"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),photos:[],sample:null};photoIdx=0}
@@ -255,7 +255,10 @@ function renderResult(){
   var c=cutoff();
   headline(s);
   var q=$("rQual");
-  if(s.umpp){q.textContent="دقة الصورة: كل بكسل ≈ "+s.umpp+" µm · "+n0(s.count)+" حبيبة"+(s.pv>=2?" · متوسط ٥ قياسات للصورة":"")+(s.umpp>30?" · قرّب الجوال شوي (الصورة تغطي ٨–١٠ سم) لقياس أدق":"");q.hidden=false}else q.hidden=true;
+  if(s.umpp){
+    // Left out: grains cut by the frame edge and lumps of grains that could not be split. Thinner spreading lowers it.
+    var out=(s.rejects?s.rejects.clump+s.rejects.edge:0),share=out/Math.max(1,s.count+out);
+    q.textContent="دقة الصورة: كل بكسل ≈ "+s.umpp+" µm · "+n0(s.count)+" حبيبة"+(s.pv>=2?" · متوسط ٥ قياسات للصورة":"")+(s.umpp>30?" · قرّب الجوال شوي (الصورة تغطي ٨–١٠ سم) لقياس أدق":"")+(share>0.05?" · "+n0(out)+" مرفوضة: افرش البن أخف عشان ما تلزق الحبيبات في بعض":"");q.hidden=false}else q.hidden=true;
   $("rD10").textContent=n0(s.d10);$("rD90").textContent=n0(s.d90);
   $("rFinesL").textContent="نواعم <"+c;$("rFines").textContent=pc(s.fines[c]||0);$("rCount").textContent=n0(s.count);
   $("rBars").innerHTML=bars([s],["a"]);

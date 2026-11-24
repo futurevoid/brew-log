@@ -150,6 +150,27 @@ function onResult(r){
   status("");draw();renderSpreads();renderResult();
 }
 
+// The headline number: once the grinder is calibrated (4+ photos at different settings), D50 is shown on the
+// grinder's own chart scale, so it reads like the grinder's setting does. The raw photo measurement stays beneath it.
+function eqInfo(s){
+  var k=s.grinder||lsGet(LASTG,"");if(!k)return null;
+  var c=GrindTranslate.curve(samples,k);if(!c.ready)return null;
+  var d=Micron.dial(k),t=GrindTranslate.translate(s,k,d,samples,{allowEst:false});
+  if(!t||t.blocked||t.idx==null)return null;
+  return {k:k,um:d.um(t.idx),setting:t.setting,acc:c.acc,outside:!!t.outside};
+}
+function headline(s){
+  var e=eqInfo(s),raw="قياس الصورة الفعلي: D50 "+n0(s.d50)+" µm";
+  if(e&&!e.outside){
+    $("rD50").textContent="≈ "+n0(e.um)+" µm";
+    $("rD50L").textContent="على سلّم "+gname(e.k)+(e.acc!=null?" · ±"+e.acc.toFixed(e.acc<1?1:0)+"%":"");
+    $("rRaw").textContent=raw+" · الإعداد التقريبي "+e.setting+"  (D10 وD90 وباقي الأرقام مقاسة من الصورة مباشرة)";
+  }else{
+    $("rD50").textContent="≈ "+n0(s.d50)+" µm";$("rD50L").textContent="D50 · الحجم الأوسط";
+    $("rRaw").textContent=e&&e.outside?"هذي الطحنة خارج مدى معايرة "+gname(e.k)+"، فنعرض القياس من الصورة مباشرة.":"نص القهوة (بالحجم) أصغر من هذا الرقم، ونصها أكبر. لتظهر القيمة على سلّم طاحونتك: اختر الطاحونة وصوّر ٤ إعدادات مختلفة.";
+  }
+}
+
 function renderSpreads(){
   var h='<span class="hint" style="margin:0">الفرشات</span>';
   cur.photos.forEach(function(p,i){h+='<span class="chipon">'+(i+1)+' ✓</span>'});
@@ -175,7 +196,8 @@ function renderResult(){
   $("results").hidden=hard&&bad;
   quickFill(s);
   var c=cutoff();
-  $("rD50").textContent="≈ "+n0(s.d50)+" µm";$("rD10").textContent=n0(s.d10);$("rD90").textContent=n0(s.d90);
+  headline(s);
+  $("rD10").textContent=n0(s.d10);$("rD90").textContent=n0(s.d90);
   $("rFinesL").textContent="نواعم <"+c;$("rFines").textContent=pc(s.fines[c]||0);$("rCount").textContent=n0(s.count);
   $("rBars").innerHTML=bars([s],["a"]);
 }
@@ -301,10 +323,10 @@ function quickSet(){
   var s=sel();if(!s)return;
   var k=$("qG").value,v=$("qSet").value.trim();
   if(k)lsSet(LASTG,k);
-  if(!k||!v){if(s.grinder){s.grinder=null;s.idx=null;s.setting=null;upsert(s)}$("qOut").textContent="";return}
+  if(!k||!v){if(s.grinder){s.grinder=null;s.idx=null;s.setting=null;upsert(s)}$("qOut").textContent="";headline(s);return}
   var r=Micron.calc(k,v);
   if(r.e||r.between){$("qOut").textContent=r.e||"اكتب إعداد موجود على الطاحونة";return}
-  s.grinder=k;s.idx=Math.round(r.i);s.setting=r.label;upsert(s);quickInfo(s);
+  s.grinder=k;s.idx=Math.round(r.i);s.setting=r.label;upsert(s);quickInfo(s);headline(s);
 }
 function quickInfo(s){
   var el=$("qOut");if(!s||!s.grinder){el.textContent="";return}
@@ -412,6 +434,20 @@ $("cutoff").onchange=function(){lsSet("grind-cutoff",+this.value);renderHist();i
 $("exportBtn").onclick=function(){
   var blob=new Blob([JSON.stringify({app:"brew-log grind analyzer",exported:new Date().toISOString(),samples:samples},null,1)],{type:"application/json"});
   var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="grind-samples-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500);
+};
+
+// Import a file made by "تصدير ملف" (also used to carry measurements to a new phone).
+$("importFile").onchange=function(){
+  var f=this.files&&this.files[0];this.value="";if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var j=JSON.parse(rd.result),a=Array.isArray(j)?j:j.samples;if(!Array.isArray(a))throw 0;
+      var n=0;a.forEach(function(x){if(x&&x.id&&typeof x.d50==="number"&&x.hist&&x.hist.length===16){upsert(x);n++}});
+      toast(n?"تم استيراد "+n+" قياسات":"الملف ما فيه قياسات صالحة");renderHist();renderHome();
+    }catch(e){toast("الملف غير صالح")}
+  };
+  rd.readAsText(f);
 };
 
 if(!lsGet("grind-guide-seen",0))guide(true);

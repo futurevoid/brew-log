@@ -165,7 +165,8 @@
 
       var bin=keep(new cv.Mat());
       var t=cv.threshold(flat,bin,0,255,cv.THRESH_BINARY_INV+cv.THRESH_OTSU);
-      if(t<100||t>215)cv.threshold(flat,bin,Math.min(215,Math.max(100,t)),255,cv.THRESH_BINARY_INV);
+      if(o.thr){t=o.thr;cv.threshold(flat,bin,t,255,cv.THRESH_BINARY_INV)}
+      else if(t<100||t>215)cv.threshold(flat,bin,Math.min(215,Math.max(100,t)),255,cv.THRESH_BINARY_INV);
       var open=keep(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));
       cv.morphologyEx(bin,bin,cv.MORPH_OPEN,open);
       // Remove the coin and everything outside the crop.
@@ -179,6 +180,10 @@
       var labels=keep(new cv.Mat()),stats=keep(new cv.Mat()),cents=keep(new cv.Mat());
       var n=cv.connectedComponentsWithStats(bin,labels,stats,cents,8,cv.CV_32S);
       var st=stats.data32S,cd=cents.data64F,lab=labels.data32S;
+      // Second moments per blob give each grain's width (minor axis): a sieve sorts by that, not by outline area.
+      var mSx=new Float64Array(n),mSy=new Float64Array(n),mSxx=new Float64Array(n),mSyy=new Float64Array(n),mSxy=new Float64Array(n);
+      for(var py=0;py<H;py++)for(var px=0,pi=py*W;px<W;px++,pi++){var lb=lab[pi];if(lb>0){mSx[lb]+=px;mSy[lb]+=py;mSxx[lb]+=px*px;mSyy[lb]+=py*py;mSxy[lb]+=px*py}}
+      var widths=[],lengths=[];
       var parts=[],diams=[],rej={noise:0,edge:0,clump:0},split=0,unsplit=0;
       for(var i=1;i<n;i++){
         var bx=st[i*5],by=st[i*5+1],bwid=st[i*5+2],bh=st[i*5+3],area=st[i*5+4];
@@ -188,15 +193,15 @@
         else if(area>=SOLIDITY_MIN_AREA&&isClump(cv,lab,W,i,bx,by,bwid,bh,rpx)){
           // Touching grains: split them (distance transform + watershed) instead of throwing them away.
           var pieces=splitClump(cv,lab,W,i,bx,by,bwid,bh);
-          if(pieces&&pieces.length===1){diams.push(2*Math.sqrt(pieces[0].a/Math.PI)*umPerPx);parts.push([Math.round(cx),Math.round(cy),Math.round(rpx*10)/10,0]);continue}
+          if(pieces&&pieces.length===1){diams.push(2*Math.sqrt(pieces[0].a/Math.PI)*umPerPx);var a1=axes(area,mSx[i],mSy[i],mSxx[i],mSyy[i],mSxy[i]);widths.push(a1[1]*umPerPx);lengths.push(a1[0]*umPerPx);parts.push([Math.round(cx),Math.round(cy),Math.round(rpx*10)/10,0]);continue}
           if(pieces&&pieces.length>1&&pieces.length<=MAX_SPLIT){
             rej.clump++;split+=pieces.length;
-            pieces.forEach(function(q){var pr=Math.sqrt(q.a/Math.PI);diams.push(2*pr*umPerPx);parts.push([Math.round(bx+q.x),Math.round(by+q.y),Math.round(pr*10)/10,3])});
+            pieces.forEach(function(q){var pr=Math.sqrt(q.a/Math.PI);diams.push(2*pr*umPerPx);var aq=axes(q.a,q.sx,q.sy,q.sxx,q.syy,q.sxy);widths.push(aq[1]*umPerPx);lengths.push(aq[0]*umPerPx);parts.push([Math.round(bx+q.x),Math.round(by+q.y),Math.round(pr*10)/10,3])});
             continue;
           }
           rej.clump++;unsplit++;status=1;
         }
-        if(!status)diams.push(2*rpx*umPerPx);
+        if(!status){diams.push(2*rpx*umPerPx);var ax=axes(area,mSx[i],mSy[i],mSxx[i],mSyy[i],mSxy[i]);widths.push(ax[1]*umPerPx);lengths.push(ax[0]*umPerPx)}
         parts.push([Math.round(cx),Math.round(cy),Math.round(rpx*10)/10,status]);
       }
 
@@ -209,8 +214,15 @@
       if(unsplit/Math.max(1,diams.length+unsplit)>0.30)warnings.push("clumps");
       if(shade>0.38)warnings.push("shadow");
       return {ok:true,width:W,height:H,coin:coin,coinMm:coinMm,umPerPx:umPerPx,crop:o.crop?crop:null,
-        diameters:diams,particles:parts,rejects:rej,threshold:t,sharpness:sharp,shade:shade,warnings:warnings};
+        diameters:diams,widths:widths,lengths:lengths,particles:parts,rejects:rej,threshold:t,sharpness:sharp,shade:shade,warnings:warnings};
     }finally{mats.forEach(function(m){m.delete()})}
+  }
+
+  // Length and width (full axes, px) of the ellipse with the same second moments as a blob.
+  function axes(a,sx,sy,sxx,syy,sxy){
+    var cx=sx/a,cy=sy/a,mxx=sxx/a-cx*cx+1/12,myy=syy/a-cy*cy+1/12,mxy=sxy/a-cx*cy;
+    var h=(mxx+myy)/2,d=Math.sqrt(Math.max(0,((mxx-myy)/2)*((mxx-myy)/2)+mxy*mxy));
+    return [4*Math.sqrt(Math.max(h+d,0)),4*Math.sqrt(Math.max(h-d,0))];
   }
 
   // Cuts a blob of touching grains into pieces: each local maximum of the distance transform
@@ -240,10 +252,10 @@
       for(var q=0;q<dd.length;q++){var v=255-Math.round(dd[q]/mx*255);im[q*3]=v;im[q*3+1]=v;im[q*3+2]=v}
       img3=cv.matFromArray(mh,mw,cv.CV_8UC3,Array.prototype.slice.call(im));
       cv.watershed(img3,mk);
-      var sa=new Float64Array(nl),sx=new Float64Array(nl),sy=new Float64Array(nl),w=mk.data32S;
-      for(var yy=0;yy<mh;yy++)for(var xx=0;xx<mw;xx++){var l=w[yy*mw+xx];if(l>0&&l<bgLabel&&md2[yy*mw+xx]){sa[l]++;sx[l]+=xx;sy[l]+=yy}}
+      var sa=new Float64Array(nl),sx=new Float64Array(nl),sy=new Float64Array(nl),sxx=new Float64Array(nl),syy=new Float64Array(nl),sxy=new Float64Array(nl),w=mk.data32S;
+      for(var yy=0;yy<mh;yy++)for(var xx=0;xx<mw;xx++){var l=w[yy*mw+xx];if(l>0&&l<bgLabel&&md2[yy*mw+xx]){sa[l]++;sx[l]+=xx;sy[l]+=yy;sxx[l]+=xx*xx;syy[l]+=yy*yy;sxy[l]+=xx*yy}}
       res=[];
-      for(var k=1;k<bgLabel;k++)if(sa[k]>=NOISE_PX)res.push({a:sa[k],x:sx[k]/sa[k]-pad,y:sy[k]/sa[k]-pad});
+      for(var k=1;k<bgLabel;k++)if(sa[k]>=NOISE_PX)res.push({a:sa[k],x:sx[k]/sa[k]-pad,y:sy[k]/sa[k]-pad,sx:sx[k],sy:sy[k],sxx:sxx[k],syy:syy[k],sxy:sxy[k]});
     }catch(e){res=null}
     finally{m.delete();dist.delete();dil.delete();pk.delete();if(ker)ker.delete();mk.delete();pl.delete();img8.delete();img3.delete();outside.delete()}
     return res;

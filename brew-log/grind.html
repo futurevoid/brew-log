@@ -50,8 +50,8 @@
 
 <div id="results" hidden>
 <div class="card">
-<div class="d50row"><span class="hint" style="margin:0">D50 · الحجم الأوسط</span><b class="big" id="rD50" dir="ltr"></b></div>
-<div class="hint" style="margin:2px 0 8px">نص القهوة (بالحجم) أصغر من هذا الرقم، ونصها أكبر.</div>
+<div class="d50row"><span class="hint" style="margin:0" id="rD50L">D50 · الحجم الأوسط</span><b class="big" id="rD50" dir="ltr"></b></div>
+<div class="hint" style="margin:2px 0 4px" id="rRaw">نص القهوة (بالحجم) أصغر من هذا الرقم، ونصها أكبر.</div>
 <div class="stats"><div><span>D10</span><b id="rD10" dir="ltr"></b></div><div><span>D90</span><b id="rD90" dir="ltr"></b></div><div><span id="rFinesL">نواعم</span><b id="rFines"></b></div><div><span>العدد</span><b id="rCount"></b></div></div>
 <details class="hint"><summary>وش يعني D10 و D90؟</summary>D10: عشرة بالمية من القهوة أصغر منه، فيبيّن كمية النواعم. D90: تسعين بالمية أصغر منه، فيبيّن وين تبدأ الحبيبات الكبيرة. كل ما كانوا أقرب لبعض كانت الطحنة أكثر انتظام.</details>
 </div>
@@ -95,7 +95,7 @@
 <div class="card" id="wearCard"></div>
 <div class="card" id="calCard"></div>
 <div id="histList"></div>
-<div class="row" style="margin-top:8px;align-items:center;justify-content:space-between"><label style="flex:1">حد النواعم<select id="cutoff"><option value="200">أقل من 200 µm</option><option value="150">أقل من 150 µm</option><option value="100">أقل من 100 µm</option></select></label><button type="button" class="btn" id="exportBtn" style="align-self:flex-end">تصدير ملف</button></div>
+<div class="row" style="margin-top:8px;align-items:center;justify-content:space-between"><label style="flex:1">حد النواعم<select id="cutoff"><option value="200">أقل من 200 µm</option><option value="150">أقل من 150 µm</option><option value="100">أقل من 100 µm</option></select></label><button type="button" class="btn" id="exportBtn" style="align-self:flex-end">تصدير ملف</button><label class="btn fileb" style="align-self:flex-end">استيراد<input type="file" id="importFile" accept="application/json,.json" hidden></label></div>
 </section>
 </div>
 

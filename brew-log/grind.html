@@ -21,7 +21,7 @@
 <section id="v-an">
 <div class="card hero" id="setup">
 <h2>قياس جديد</h2><p class="hint" style="margin:0 0 10px">صوّر البن مفروش على ورقة بيضاء مع عملة بجنبه.</p>
-<label>العملة في الصورة<select id="coin"><option value="23">1 ريال سعودي · 23.0 مم</option><option value="custom">مقاس آخر…</option></select></label>
+<label>العملة في الصورة<select id="coin"><option value="23">1 ريال سعودي · 23.0 مم</option><option value="24">نص ريال · 50 هللة (الذهبي) · 24.0 مم</option><option value="21.5">ربع ريال · 25 هللة (الذهبي) · 21.5 مم</option><option value="26s">نص ريال · 50 هللة (القديم الفضي) · 26.0 مم</option><option value="23s">ربع ريال · 25 هللة (القديم الفضي) · 23.0 مم</option><option value="custom">مقاس آخر…</option></select></label>
 <label id="coinMmL" hidden>قطر العملة (مم)<input type="number" id="coinMm" inputmode="decimal" step="0.01" min="10" max="40" placeholder="23.0"></label>
 <div class="hint" style="margin:6px 0 0">تأكد من قطر العملة بالمسطرة مرة وحدة: الدقة كلها تعتمد عليه.</div>
 <div class="row" style="margin-top:10px"><label class="btn p fileb">التقط صورة<input type="file" id="cam" accept="image/*" capture="environment" hidden></label><label class="btn fileb">اختر من المعرض<input type="file" id="gal" accept="image/*" hidden></label><button type="button" class="btn" id="showGuide">الدليل</button></div>
@@ -58,9 +58,10 @@
 </div>
 <div class="card"><div class="hint" style="margin:0 0 6px">توزيع الأحجام (بالحجم)</div><div class="bars" id="rBars" dir="ltr"></div><div class="axis" dir="ltr"><span>100</span><span>300</span><span>1000</span><span>2000 µm</span></div></div>
 <div class="card" id="quick">
-<div class="hint" style="margin:0 0 6px">طحنتها على أي طاحونة؟ (اختياري، ويحسّن دقة التحويل)</div>
-<div class="g2"><label><input type="search" id="qQ" placeholder="🔍 ابحث" autocomplete="off"><select id="qG"></select></label><label><input type="text" id="qSet" placeholder="الإعداد" autocomplete="off"></label></div>
+<div class="hint" style="margin:0 0 6px"><b style="color:var(--ink)">طاحونتك</b> · اخترها ويطلع لك الإعداد اللي يطابق هذي الطحنة.</div>
+<div class="g2"><label><input type="search" id="qQ" placeholder="🔍 ابحث" autocomplete="off"><select id="qG"></select></label><label><input type="text" id="qSet" placeholder="إعداد طحنتك (اختياري)" autocomplete="off"></label></div>
 <div class="hint" id="qOut" style="margin:6px 0 0"></div>
+<div class="hint" style="margin:4px 0 0">«إعداد طحنتك» هو الرقم اللي كان على الطاحونة وقت الطحن. لو كتبته تنحفظ الصورة معايرة لطاحونتك، وتصير قراءاتها أدق مع الوقت.</div>
 </div>
 <div class="row"><button type="button" class="btn p" id="useBrew" style="flex:1">استخدم في وصفتي</button></div>
 <div class="row"><button type="button" class="btn" id="goTr">ترجم لطواحين</button><button type="button" class="btn" id="goCmp">قارن</button><button type="button" class="btn" id="newSample">قياس جديد</button></div>

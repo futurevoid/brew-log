@@ -55,6 +55,14 @@ function makePhoto(cv,o){
   }
   // A shadow darkens everything under it: paper, coin and grains alike.
   for(var k=0;k<W*H;k++){var v=Math.max(0,Math.min(255,gray[k]*(o.shadow?1-0.45*(k%W)/W:1)));data[k*4]=v;data[k*4+1]=v*0.97;data[k*4+2]=v*0.94;data[k*4+3]=255}
+  // A silver coin (the older 25 and 50 halalas): light grey with a shine, found by its edge.
+  if(o.silver){for(var sy=Math.floor(coin.y-o.coinR-1);sy<=coin.y+o.coinR+1;sy++)for(var sx=Math.floor(coin.x-o.coinR-1);sx<=coin.x+o.coinR+1;sx++){
+    if(sx<0||sy<0||sx>=W||sy>=H)continue;var sd=Math.hypot(sx-coin.x,sy-coin.y);if(sd>o.coinR)continue;
+    var q5=(sy*W+sx)*4,sv=168+30*Math.max(0,1-Math.hypot(sx-coin.x+o.coinR*0.35,sy-coin.y+o.coinR*0.35)/(o.coinR*0.6))-18*(sd/o.coinR);data[q5]=sv;data[q5+1]=sv;data[q5+2]=sv*1.02}}
+  // A brass coin (the 2016 25 and 50 halalas): gold all over, found by colour.
+  if(o.brass){for(var by=Math.floor(coin.y-o.coinR-1);by<=coin.y+o.coinR+1;by++)for(var bx=Math.floor(coin.x-o.coinR-1);bx<=coin.x+o.coinR+1;bx++){
+    if(bx<0||by<0||bx>=W||by>=H)continue;var dd=Math.hypot(bx-coin.x,by-coin.y);if(dd>o.coinR)continue;
+    var q4=(by*W+bx)*4,shade=0.85+0.15*Math.cos(dd/o.coinR*3);data[q4]=205*shade;data[q4+1]=165*shade;data[q4+2]=75*shade}}
   var img={data:data,width:W,height:H};
   if(o.blur){
     var m=cv.matFromImageData(img),b=new cv.Mat();
@@ -155,6 +163,22 @@ function run(cv){
   var rtb=GA.analyzeImage(cv,tb.img,{coinMm:23}),ttb=GA.summarize([tb.truth]);
   if(rtb.ok){var gtb=GA.summarize([L(rtb)]);check("table speckles ignored, D50 within 4%",Math.abs(pct(gtb.d50,ttb.d50))<4,gtb.d50.toFixed(0)+" vs "+ttb.d50.toFixed(0))}
   else check("table photo analysed",false,rtb.error);
+
+  // 12. Brass coin (50 halalas, 24 mm): found by colour, scale and D50 right.
+  var br=makePhoto(cv,{coinMm:24,coinR:450,median:600,sigma:0.45,count:900,seed:41,brass:true});
+  var rbr=GA.analyzeImage(cv,br.img,{coinMm:24}),tbr=GA.summarize([br.truth]);
+  if(rbr.ok){var gbr=GA.summarize([L(rbr)]);
+    check("brass coin found by colour within 1%",rbr.coin.gold&&Math.abs(pct(rbr.coin.r,450))<1,"r="+rbr.coin.r.toFixed(1)+" (450)"+(rbr.coin.gold?" gold":" edge"));
+    check("brass coin photo D50 within 3%",Math.abs(pct(gbr.d50,tbr.d50))<3,gbr.d50.toFixed(0)+" vs "+tbr.d50.toFixed(0));
+  }else check("brass coin photo analysed",false,rbr.error);
+
+  // 13. Silver coin (older 50 halalas, 26 mm): found by its edge, scale and D50 right.
+  var sv=makePhoto(cv,{coinMm:26,coinR:430,median:600,sigma:0.45,count:900,seed:43,silver:true});
+  var rsv=GA.analyzeImage(cv,sv.img,{coinMm:26}),tsv=GA.summarize([sv.truth]);
+  if(rsv.ok){var gsv=GA.summarize([L(rsv)]);
+    check("silver coin found by its edge within 1%",Math.abs(pct(rsv.coin.r,430))<1,"r="+rsv.coin.r.toFixed(1)+" (430)"+(rsv.coin.gold?" gold":rsv.coin.refined?" edge, refined":" edge"));
+    check("silver coin photo D50 within 3%",Math.abs(pct(gsv.d50,tsv.d50))<3,gsv.d50.toFixed(0)+" vs "+tsv.d50.toFixed(0));
+  }else check("silver coin photo analysed",false,rsv.error);
 
   // 8. No coin: clear error.
   var blank={data:new Uint8ClampedArray(800*600*4).fill(235),width:800,height:600};

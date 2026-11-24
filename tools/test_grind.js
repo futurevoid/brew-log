@@ -39,8 +39,9 @@ function makePhoto(cv,o){
     placed.push([cx,cy,rad]);
     drawn++;
     if(o.clumps&&drawn%3===0){
-      // Three grains stuck together in an L: counts as one rejected clump.
+      // Three grains stuck together in an L: the engine should split them back into three.
       disc(cx,cy,rad,55);disc(cx+rad*1.7,cy,rad,55);disc(cx,cy+rad*1.7,rad,55);
+      for(var g=0;g<3;g++)truth.push(2*rad*umPerPx);
       placed[placed.length-1][2]=rad*3.2;
     }else truth.push(eq(disc(cx,cy,rad,55)));
   }
@@ -108,8 +109,8 @@ function run(cv){
   check("blurry photo warned",rbl.ok&&rbl.warnings.indexOf("blurry")>=0,rbl.ok?"sharp="+rbl.sharpness.toFixed(0)+" ["+rbl.warnings+"]":rbl.error);
   var cl=makePhoto(cv,{coinMm:23,coinR:420,median:600,sigma:0.35,count:700,seed:5,clumps:true});
   var rcl=GA.analyzeImage(cv,cl.img,{coinMm:23});
-  check("clumps rejected and warned",rcl.ok&&rcl.rejects.clump>100&&rcl.warnings.indexOf("clumps")>=0,rcl.ok?"clumps="+rcl.rejects.clump+" ["+rcl.warnings+"]":rcl.error);
-  if(rcl.ok){var gcl=GA.summarize([rcl.diameters]),tcl=GA.summarize([cl.truth]);check("clumps don't skew D50",Math.abs(pct(gcl.d50,tcl.d50))<5,gcl.d50.toFixed(0)+" vs "+tcl.d50.toFixed(0))}
+  check("clumps found and split, no clump warning",rcl.ok&&rcl.rejects.clump>100&&rcl.warnings.indexOf("clumps")<0,rcl.ok?"clumps="+rcl.rejects.clump+" ["+rcl.warnings+"]":rcl.error);
+  if(rcl.ok){var gcl=GA.summarize([rcl.diameters]),tcl=GA.summarize([cl.truth]);check("split clumps keep D50 within 8%",Math.abs(pct(gcl.d50,tcl.d50))<8,gcl.d50.toFixed(0)+" vs "+tcl.d50.toFixed(0))}
   var far=makePhoto(cv,{coinMm:23,coinR:150,median:900,sigma:0.4,count:600,seed:9});
   var rf=GA.analyzeImage(cv,far.img,{coinMm:23});
   check("coin too small warned",rf.ok&&rf.warnings.indexOf("coin_small")>=0,rf.ok?"µm/px="+rf.umPerPx.toFixed(1):rf.error);

@@ -3,12 +3,58 @@
 // Pure functions of the pixels and options, so the same photo always gives the same result.
 (function(root){
   var BINS=16,BIN_LO=100,BIN_HI=2000,CUTOFFS=[100,150,200];
-  var NOISE_PX=3,CLUMP_SOLIDITY=0.85,CLUMP_NOTCH=0.25,SOLIDITY_MIN_AREA=30;
+  var NOISE_PX=3,CLUMP_SOLIDITY=0.85,CLUMP_NOTCH=0.25,SOLIDITY_MIN_AREA=30,MAX_SPLIT=60;
 
   function odd(n){n=Math.max(3,Math.round(n));return n%2?n:n+1}
 
   // Strongest dark circle on a light background, refined at full resolution.
-  function findCoin(cv,gray){
+  function findCoin(cv,gray,rgba){
+    // Gold-coloured coins (the 1 riyal) are found by colour first: it works on curved, glossy or
+    // cluttered backgrounds where edge detection is fooled by plate rims and shadows.
+    if(rgba){var cc=findGoldCoin(cv,rgba);if(cc)return cc}
+    return findCoinEdges(cv,gray);
+  }
+
+  // Yellow-ish ring blob -> circle fitted to its outline.
+  function findGoldCoin(cv,rgba){
+    var rgb=new cv.Mat(),hsv=new cv.Mat(),mask=new cv.Mat(),lo=null,hi=null,cs=new cv.MatVector(),hh=new cv.Mat(),ker=null,out=null;
+    try{
+      var W=rgba.cols,H=rgba.rows,sc=Math.min(1,1000/Math.max(W,H));
+      cv.cvtColor(rgba,rgb,cv.COLOR_RGBA2RGB);
+      if(sc<1)cv.resize(rgb,rgb,new cv.Size(Math.round(W*sc),Math.round(H*sc)),0,0,cv.INTER_AREA);
+      cv.cvtColor(rgb,hsv,cv.COLOR_RGB2HSV);
+      lo=new cv.Mat(hsv.rows,hsv.cols,hsv.type(),[12,45,100,0]);hi=new cv.Mat(hsv.rows,hsv.cols,hsv.type(),[38,255,255,0]);
+      cv.inRange(hsv,lo,hi,mask);
+      var kk=odd(Math.max(hsv.cols,hsv.rows)/150);
+      ker=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(kk,kk));
+      cv.morphologyEx(mask,mask,cv.MORPH_CLOSE,ker);
+      cv.findContours(mask,cs,hh,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
+      var m=Math.min(hsv.cols,hsv.rows),best=null;
+      for(var i=0;i<cs.size();i++){
+        var ct=cs.get(i),a=cv.contourArea(ct);
+        if(a>m*m*0.0004){
+          var r=cv.boundingRect(ct),asp=r.width/r.height;
+          if(asp>0.75&&asp<1.33){
+            var pts=[];for(var j=0;j<ct.data32S.length;j+=2)pts.push([ct.data32S[j],ct.data32S[j+1]]);
+            var f=fitCircle(pts);
+            if(f){
+              var res=pts.map(function(q){return Math.abs(Math.hypot(q[0]-f.x,q[1]-f.y)-f.r)}),med=percentile(res,0.5);
+              var good=pts.filter(function(q,k){return res[k]<Math.max(1.5,2.5*med)});
+              if(good.length>=pts.length*0.6){f=fitCircle(good)||f}
+              var fill=a/(Math.PI*f.r*f.r);
+              // A coin outline is a filled disc: reject thin arcs, strips and ragged blobs.
+              if(fill>0.75&&fill<1.2&&f.r>m*0.02&&f.r<m*0.4&&(!best||a>best.a))best={a:a,x:f.x,y:f.y,r:f.r};
+            }
+          }
+        }
+        ct.delete();
+      }
+      if(best)out={x:best.x/sc,y:best.y/sc,r:(best.r+0.5)/sc,refined:true,gold:true};
+    }finally{rgb.delete();hsv.delete();mask.delete();cs.delete();hh.delete();if(lo)lo.delete();if(hi)hi.delete();if(ker)ker.delete()}
+    return out;
+  }
+
+  function findCoinEdges(cv,gray){
     var W=gray.cols,H=gray.rows,s=Math.min(1,1000/Math.max(W,H));
     var small=new cv.Mat(),circles=new cv.Mat(),best=null;
     try{
@@ -97,7 +143,7 @@
       var W=gray.cols,H=gray.rows;
       var crop=o.crop?{x:Math.max(0,Math.round(o.crop.x)),y:Math.max(0,Math.round(o.crop.y)),w:Math.round(o.crop.w),h:Math.round(o.crop.h)}:{x:0,y:0,w:W,h:H};
       crop.w=Math.min(crop.w,W-crop.x);crop.h=Math.min(crop.h,H-crop.y);
-      var coin=o.coin?{x:o.coin.x,y:o.coin.y,r:o.coin.r,manual:true}:findCoin(cv,gray);
+      var coin=o.coin?{x:o.coin.x,y:o.coin.y,r:o.coin.r,manual:true}:findCoin(cv,gray,src);
       if(!coin)return {ok:false,error:"coin_not_found",width:W,height:H};
       var coinMm=o.coinMm||23,umPerPx=coinMm*1000/(2*coin.r);
 
@@ -111,6 +157,8 @@
       // Paper evenness (shadows), measured away from the coin.
       var bv=[],bd=bgS.data,bw=bgS.cols;
       for(var y=0;y<bgS.rows;y+=3)for(var x=0;x<bw;x+=3){var dx=x/s-coin.x,dy=y/s-coin.y;if(dx*dx+dy*dy>Math.pow(coin.r*1.6,2))bv.push(bd[y*bw+x])}
+      // Only paper counts: a dark table or plate edge around the sheet isn't a shadow on the grains.
+      var ref95=percentile(bv,0.95);bv=bv.filter(function(v){return v>=0.6*ref95});
       var p50=percentile(bv,0.5)||1,shade=(percentile(bv,0.95)-percentile(bv,0.05))/p50;
       cv.resize(bgS,bg,new cv.Size(W,H),0,0,cv.INTER_LINEAR);
       cv.divide(gray,bg,flat,255);
@@ -131,13 +179,23 @@
       var labels=keep(new cv.Mat()),stats=keep(new cv.Mat()),cents=keep(new cv.Mat());
       var n=cv.connectedComponentsWithStats(bin,labels,stats,cents,8,cv.CV_32S);
       var st=stats.data32S,cd=cents.data64F,lab=labels.data32S;
-      var parts=[],diams=[],rej={noise:0,edge:0,clump:0};
+      var parts=[],diams=[],rej={noise:0,edge:0,clump:0},split=0,unsplit=0;
       for(var i=1;i<n;i++){
         var bx=st[i*5],by=st[i*5+1],bwid=st[i*5+2],bh=st[i*5+3],area=st[i*5+4];
         if(area<NOISE_PX){rej.noise++;continue}
         var cx=cd[i*2],cy=cd[i*2+1],rpx=Math.sqrt(area/Math.PI),status=0;
         if(bx<=crop.x||by<=crop.y||bx+bwid>=crop.x+crop.w||by+bh>=crop.y+crop.h){rej.edge++;status=2}
-        else if(area>=SOLIDITY_MIN_AREA&&isClump(cv,lab,W,i,bx,by,bwid,bh,rpx)){rej.clump++;status=1}
+        else if(area>=SOLIDITY_MIN_AREA&&isClump(cv,lab,W,i,bx,by,bwid,bh,rpx)){
+          // Touching grains: split them (distance transform + watershed) instead of throwing them away.
+          var pieces=splitClump(cv,lab,W,i,bx,by,bwid,bh);
+          if(pieces&&pieces.length===1){diams.push(2*Math.sqrt(pieces[0].a/Math.PI)*umPerPx);parts.push([Math.round(cx),Math.round(cy),Math.round(rpx*10)/10,0]);continue}
+          if(pieces&&pieces.length>1&&pieces.length<=MAX_SPLIT){
+            rej.clump++;split+=pieces.length;
+            pieces.forEach(function(q){var pr=Math.sqrt(q.a/Math.PI);diams.push(2*pr*umPerPx);parts.push([Math.round(bx+q.x),Math.round(by+q.y),Math.round(pr*10)/10,3])});
+            continue;
+          }
+          rej.clump++;unsplit++;status=1;
+        }
         if(!status)diams.push(2*rpx*umPerPx);
         parts.push([Math.round(cx),Math.round(cy),Math.round(rpx*10)/10,status]);
       }
@@ -146,13 +204,49 @@
 
       var warnings=[];
       if(umPerPx>45)warnings.push("coin_small");
-      if(sharp<12)warnings.push("blurry");
+      if(sharp<5)warnings.push("blurry");
       if(diams.length<150)warnings.push("few");
-      if(rej.clump/Math.max(1,diams.length+rej.clump)>0.30)warnings.push("clumps");
-      if(shade>0.45)warnings.push("shadow");
+      if(unsplit/Math.max(1,diams.length+unsplit)>0.30)warnings.push("clumps");
+      if(shade>0.38)warnings.push("shadow");
       return {ok:true,width:W,height:H,coin:coin,coinMm:coinMm,umPerPx:umPerPx,crop:o.crop?crop:null,
         diameters:diams,particles:parts,rejects:rej,threshold:t,sharpness:sharp,shade:shade,warnings:warnings};
     }finally{mats.forEach(function(m){m.delete()})}
+  }
+
+  // Cuts a blob of touching grains into pieces: each local maximum of the distance transform
+  // seeds one grain, and a watershed draws the borders. Returns [{a,x,y}] (area px, centre in the blob's box).
+  function splitClump(cv,lab,W,id,bx,by,bw,bh){
+    var pad=3,mw=bw+2*pad,mh=bh+2*pad;
+    var m=new cv.Mat(mh,mw,cv.CV_8UC1,new cv.Scalar(0)),dist=new cv.Mat(),dil=new cv.Mat(),pk=new cv.Mat(),ker=null,mk=new cv.Mat(),pl=new cv.Mat(),img8=new cv.Mat(),img3=new cv.Mat(),outside=new cv.Mat(),res=null;
+    try{
+      var md=m.data;
+      for(var y=0;y<bh;y++){var row=(by+y)*W+bx,mr=(y+pad)*mw+pad;for(var x=0;x<bw;x++)if(lab[row+x]===id)md[mr+x]=255}
+      cv.distanceTransform(m,dist,cv.DIST_L2,5);
+      cv.GaussianBlur(dist,dist,new cv.Size(5,5),0);
+      var mm=cv.minMaxLoc(dist),mx=mm.maxVal;
+      if(mx<2)return null;
+      ker=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(9,9));
+      cv.dilate(dist,dil,ker);
+      // A peak must be a local maximum and not a faint bump on a bigger grain's slope.
+      var dd=dist.data32F,dl=dil.data32F,peak=new cv.Mat(mh,mw,cv.CV_8UC1,new cv.Scalar(0)),pd=peak.data;
+      for(var i=0;i<dd.length;i++)if(dd[i]>=2.5&&dd[i]>=dl[i]-1e-4)pd[i]=255;
+      var nl=cv.connectedComponents(peak,mk,8,cv.CV_32S);
+      peak.delete();
+      if(nl<3)return null;
+      var mkd=mk.data32S,bgLabel=nl,md2=m.data;
+      for(var j=0;j<mkd.length;j++)if(!md2[j])mkd[j]=bgLabel;
+      // Watershed image: grain interiors dark, borders bright.
+      var im=new Uint8Array(mw*mh*3);
+      for(var q=0;q<dd.length;q++){var v=255-Math.round(dd[q]/mx*255);im[q*3]=v;im[q*3+1]=v;im[q*3+2]=v}
+      img3=cv.matFromArray(mh,mw,cv.CV_8UC3,Array.prototype.slice.call(im));
+      cv.watershed(img3,mk);
+      var sa=new Float64Array(nl),sx=new Float64Array(nl),sy=new Float64Array(nl),w=mk.data32S;
+      for(var yy=0;yy<mh;yy++)for(var xx=0;xx<mw;xx++){var l=w[yy*mw+xx];if(l>0&&l<bgLabel&&md2[yy*mw+xx]){sa[l]++;sx[l]+=xx;sy[l]+=yy}}
+      res=[];
+      for(var k=1;k<bgLabel;k++)if(sa[k]>=NOISE_PX)res.push({a:sa[k],x:sx[k]/sa[k]-pad,y:sy[k]/sa[k]-pad});
+    }catch(e){res=null}
+    finally{m.delete();dist.delete();dil.delete();pk.delete();if(ker)ker.delete();mk.delete();pl.delete();img8.delete();img3.delete();outside.delete()}
+    return res;
   }
 
   // Edge sharpness: Laplacian spread on particle outlines in a central window, divided by the

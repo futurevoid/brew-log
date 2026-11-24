@@ -196,8 +196,8 @@ function draw(){
   ctx.drawImage(img.canvas,0,0,cv.width,cv.height);
   var lw=Math.max(1.5,cv.width/500);
   if(res&&res.ok&&mode!=="coin"){
-    var cols=["#1f7fa8","#c26a1e","#9a9086"];
-    res.particles.forEach(function(p){ctx.beginPath();ctx.strokeStyle=cols[p[3]];ctx.lineWidth=lw;if(p[3])ctx.setLineDash([3,2]);else ctx.setLineDash([]);ctx.arc(p[0]*dScale,p[1]*dScale,Math.max(2.5,p[2]*dScale+lw),0,7);ctx.stroke()});
+    var cols=["#1f7fa8","#c26a1e","#9a9086","#1f7fa8"];
+    res.particles.forEach(function(p){ctx.beginPath();ctx.strokeStyle=cols[p[3]];ctx.lineWidth=lw;if(p[3]&&p[3]!==3)ctx.setLineDash([3,2]);else ctx.setLineDash([]);ctx.arc(p[0]*dScale,p[1]*dScale,Math.max(2.5,p[2]*dScale+lw),0,7);ctx.stroke()});
     ctx.setLineDash([]);
     var c=res.coin;ctx.beginPath();ctx.strokeStyle="#1f7fa8";ctx.lineWidth=lw*2;ctx.arc(c.x*dScale,c.y*dScale,c.r*dScale,0,7);ctx.stroke();
     $("phChip").textContent=n0(res.diameters.length)+" حبيبة · "+n0(res.rejects.clump+res.rejects.edge)+" مرفوضة";$("phChip").hidden=false;

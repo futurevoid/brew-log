@@ -173,6 +173,7 @@ function renderResult(){
     if(!lsGet("grind-guide-fail-shown",0)){lsSet("grind-guide-fail-shown",1)}
   }
   $("results").hidden=hard&&bad;
+  quickFill(s);
   var c=cutoff();
   $("rD50").textContent="≈ "+n0(s.d50)+" µm";$("rD10").textContent=n0(s.d10);$("rD90").textContent=n0(s.d90);
   $("rFinesL").textContent="نواعم <"+c;$("rFines").textContent=pc(s.fines[c]||0);$("rCount").textContent=n0(s.count);
@@ -294,6 +295,32 @@ function saveSrc(){
   if(r.e||r.between){$("srcErr").textContent=r.e||"اكتب إعداد موجود على الطاحونة";return}
   s.grinder=k;s.idx=Math.round(r.i);s.setting=r.label;upsert(s);renderTrRowsOnly();
 }
+// Quick source row on the result screen: the grinder is remembered, so a new photo needs only the setting.
+var LASTG="grind-last-grinder";
+function quickSet(){
+  var s=sel();if(!s)return;
+  var k=$("qG").value,v=$("qSet").value.trim();
+  if(k)lsSet(LASTG,k);
+  if(!k||!v){if(s.grinder){s.grinder=null;s.idx=null;s.setting=null;upsert(s)}$("qOut").textContent="";return}
+  var r=Micron.calc(k,v);
+  if(r.e||r.between){$("qOut").textContent=r.e||"اكتب إعداد موجود على الطاحونة";return}
+  s.grinder=k;s.idx=Math.round(r.i);s.setting=r.label;upsert(s);quickInfo(s);
+}
+function quickInfo(s){
+  var el=$("qOut");if(!s||!s.grinder){el.textContent="";return}
+  var c=GrindTranslate.contribution(samples,s).after;
+  var t=GrindTranslate.translate(s,s.grinder,Micron.dial(s.grinder),samples,{allowEst:false});
+  if(c.ready&&!t.blocked&&t.idx!=null){var um=Micron.dial(s.grinder).um(t.idx);el.textContent="≈ "+n0(um)+" µm على سلّم "+gname(s.grinder)+" (إعداد تقريبي "+t.setting+") · ±"+(c.acc!=null?c.acc.toFixed(0)+"%":"؟")}
+  else el.textContent="انحسبت في المعايرة · "+c.settings+" من "+GrindTranslate.MIN_SETTINGS+" إعدادات لتفعيل الترجمة الدقيقة";
+}
+function quickFill(s){
+  var last=lsGet(LASTG,"");
+  fillGrinders($("qG"),$("qQ").value,(s&&s.grinder)||$("qG").value||last);
+  if(document.activeElement!==$("qSet"))$("qSet").value=(s&&s.setting)||"";
+  quickInfo(s);
+}
+$("qQ").oninput=function(){fillGrinders($("qG"),this.value,null);quickSet()};
+$("qG").onchange=quickSet;$("qSet").oninput=quickSet;
 function renderTrRowsOnly(){var a=document.activeElement&&document.activeElement.id;renderTr();if(a&&$(a))$(a).focus()}
 function calNote(s){
   var el=$("calNote");

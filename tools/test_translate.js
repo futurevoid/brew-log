@@ -95,5 +95,19 @@ check("Q Air regression ready",!!rg&&rg.n===5,rg?"leave-one-out ±"+rg.acc.toFix
 check("Q Air regression leave-one-out under 4%",rg&&rg.acc<4);
 check("Q Air 2.3.2 photo reads about 805 um",rg&&Math.abs(rg.um(1074)-805)/805<0.04,rg?rg.um(1074).toFixed(0):"");
 check("regression needs the minimum settings",T.regress(qS.slice(0,3),QA,dQA)===null);
+
+// Built-in calibration (empty history): photo D50 -> chart micron, for any grinder.
+var ref=T.reference();
+check("built-in calibration fits its five photos within 2%",[[753,510],[943,680],[1070,805],[1318,1020],[1520,1190]].every(function(p){return Math.abs(ref.um(p[0])-p[1])/p[1]<0.02}),"chart = "+ref.a.toFixed(0)+" + "+ref.b.toFixed(3)+" x D50, leave-one-out ±"+ref.acc.toFixed(1)+"%");
+check("built-in: the cropped 3.5.0 photo (D50 1,516) reads 1,190 within 2%",Math.abs(ref.um(1516)-1190)/1190<0.02,ref.um(1516).toFixed(0));
+var lone={d50:1516,hist:hist(1516)};
+var tq=T.translate(lone,QA,dQA,[],{allowEst:true,um:ref.um(1516)});
+check("built-in, no history: Q Air setting from one photo is 3.5.0 (within one step)",Math.abs(tq.idx-105)<=1,tq.setting);
+var mid={d50:943,hist:hist(943)},um2=ref.um(943);
+var tc=T.translate(mid,C40,dC40,[],{allowEst:true,um:um2}),best=-1,bd=1e9;
+for(var q=0;q<dC40.labels.length;q++){if(!dC40.uniq[q])continue;var dq=Math.abs(dC40.um(q)-um2);if(dq<bd){bd=dq;best=q}}
+check("built-in works for other grinders: C40 setting is the one whose chart micron matches",tc.idx===best&&tc.ref===true&&!tc.outside,tc.setting+" ≈ "+Math.round(dC40.um(tc.idx))+" µm for "+Math.round(um2)+" µm");
+var raw=T.translate(mid,C40,dC40,[],{allowEst:true});
+check("without the conversion the raw photo D50 would pick a coarser C40 setting",raw.idx>tc.idx,raw.setting+" vs "+tc.setting);
 console.log(fails?fails+" failed":"all passed");
 process.exit(fails?1:0);

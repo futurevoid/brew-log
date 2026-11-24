@@ -48,8 +48,10 @@ $("tabs").addEventListener("click",function(e){var b=e.target.closest("button");
 
 // ---------- coin ----------
 var coinSaved=lsGet("grind-coin",{v:"23",mm:""});
-$("coin").value=coinSaved.v;$("coinMm").value=coinSaved.mm||"";
-function coinMm(){return $("coin").value==="custom"?(+$("coinMm").value||0):23}
+$("coin").value=coinSaved.v;if(!$("coin").value)$("coin").value="23";$("coinMm").value=coinSaved.mm||"";
+// Coin diameters (Numista and other catalogues). 2016 series, gold-coloured: 1 riyal 23, 50 halalas 24, 25 halalas 21.5.
+// Older cupronickel (silver): 50 halalas 26, 25 halalas 23; their values end in "s" so they differ from the riyal.
+function coinMm(){var v=$("coin").value;return v==="custom"?(+$("coinMm").value||0):(parseFloat(v)||23)}
 function coinUi(){$("coinMmL").hidden=$("coin").value!=="custom";lsSet("grind-coin",{v:$("coin").value,mm:$("coinMm").value})}
 $("coin").onchange=coinUi;$("coinMm").oninput=coinUi;coinUi();
 
@@ -90,6 +92,9 @@ function runAnalysis(opts){
 var img=null,cur=null,photoIdx=0,res=null,mode=null,fix=null,crop=null,addingSpread=false,showAnyway=false;
 var MAXSIDE=4032;
 var ENGINE=2; // measuring method of the saved numbers (2 = five runs per photo, fixed working pixel size)
+// Shown at the bottom of the page, so it is easy to see which version a phone is running.
+var APP_VER="2026-11-24 · built-in calibration · 5 coins";
+try{$("appVer").textContent="v "+APP_VER+(GrindTranslate.reference?"":" · old files")}catch(e){}
 function status(t){$("status").textContent=t||""}
 function newSession(){cur={id:"g"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),photos:[],sample:null};photoIdx=0}
 
@@ -382,13 +387,21 @@ function quickSet(){
   var s=sel();if(!s)return;
   var k=$("qG").value,v=$("qSet").value.trim();
   if(k)lsSet(LASTG,k);
-  if(!k||!v){if(s.grinder){s.grinder=null;s.idx=null;s.setting=null;upsert(s)}$("qOut").textContent="";headline(s);return}
+  qPh();
+  if(!k||!v){if(s.grinder){s.grinder=null;s.idx=null;s.setting=null;upsert(s)}headline(s);quickInfo(s);return}
   var r=Micron.calc(k,v);
   if(r.e||r.between){$("qOut").textContent=r.e||"اكتب إعداد موجود على الطاحونة";return}
   s.grinder=k;s.idx=Math.round(r.i);s.setting=r.label;upsert(s);quickInfo(s);headline(s);
 }
+// Example setting from the chosen grinder's own dial, so it is clear what to type.
+function qPh(){var k=$("qG").value;if(!k){$("qSet").placeholder="إعداد طحنتك (اختياري)";return}var d=Micron.dial(k);$("qSet").placeholder="إعداد طحنتك، مثل "+d.labels[Math.floor(d.labels.length*0.6)]}
 function quickInfo(s){
-  var el=$("qOut");if(!s||!s.grinder){el.textContent="";return}
+  var el=$("qOut");if(!s){el.textContent="";return}
+  if(!s.grinder){
+    var k=$("qG").value,e=k?eqInfo(s):null;
+    el.textContent=e&&e.k===k&&e.setting?"هذي الطحنة تطابق الإعداد "+e.setting+" على "+gname(k)+".":e&&e.k===k&&e.offDial?"هذي الطحنة خارج مدى إعدادات "+gname(k)+".":"";
+    return;
+  }
   var c=GrindTranslate.contribution(samples,s).after,e=c.ready?eqInfo(s):null;
   if(e&&!e.outside)el.textContent="≈ "+n0(e.um)+" µm على سلّم "+gname(s.grinder)+" (إعداد تقريبي "+e.setting+") · "+(e.extrap?"تقدير خارج المعايرة":"±"+(e.acc!=null?e.acc.toFixed(0)+"%":"؟"));
   else if(c.ready)el.textContent="هذي الطحنة خارج مدى معايرة "+gname(s.grinder);
@@ -398,7 +411,7 @@ function quickFill(s){
   var last=lsGet(LASTG,"");
   fillGrinders($("qG"),$("qQ").value,(s&&s.grinder)||$("qG").value||last);
   if(document.activeElement!==$("qSet"))$("qSet").value=(s&&s.setting)||"";
-  quickInfo(s);
+  qPh();quickInfo(s);
 }
 $("qQ").oninput=function(){fillGrinders($("qG"),this.value,null);quickSet()};
 $("qG").onchange=quickSet;$("qSet").oninput=quickSet;

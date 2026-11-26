@@ -27,7 +27,7 @@
       "
     >
       الجافاسكربت ما اشتغل في هذا المتصفح، فالنموذج ما يشتغل. تأكد إن style.css
-      و script.js و grinders.js و micron.js و dial.js بنفس مجلد index.html،
+      و script.js و grinders.js و micron.js و dial.js و roasters.js بنفس مجلد index.html،
       وافتح الصفحة من متصفح مو من معاينة ديسكورد أو الملفات.
       <div
         id="jserr"
@@ -83,9 +83,18 @@
           </div>
           <div id="beanFields">
             <div class="g">
-              <label
-                >المحمصة<input type="text" id="roaster" placeholder="DAK"
-              /></label>
+              <label class="rfield"
+                >المحمصة<input
+                  type="text"
+                  id="roaster"
+                  placeholder="DAK"
+                  autocomplete="off"
+                  role="combobox"
+                  aria-expanded="false"
+                  aria-controls="roasterSug"
+                />
+                <div class="sug" id="roasterSug" role="listbox" hidden></div
+              ></label>
               <label
                 >المحصول<input type="text" id="coffee" placeholder="Surf Jam"
               /></label>
@@ -579,6 +588,7 @@
       defer
     ></script>
     <script src="grinders.js"></script>
+    <script src="roasters.js"></script>
     <script src="micron.js"></script>
     <script src="dial.js"></script>
     <script src="script.js"></script>

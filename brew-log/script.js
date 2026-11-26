@@ -1969,6 +1969,176 @@ var varPick = (function () {
   return { sync: sync, add: add, chosen: chosen };
 })();
 
+// ================= المحمصة: بحث في المحامص ومحاصيلك المحفوظة =================
+// One search box: it matches the roaster list (roasters.js, by name, Arabic spelling, country or region word such as
+// "خليجية" or "مصر") and the coffees already saved in the archive (by roaster, coffee or origin). Picking a roaster fills the
+// field and moves on to the coffee; picking a saved coffee fills the whole bean section. Typing a roaster that is not
+// listed still works.
+var roasterPick = (function () {
+  var KW = {
+    sa: "سعودية السعودية saudi ksa",
+    gulf: "خليجية خليجي الخليج gulf",
+    eg: "مصرية مصر egypt",
+    lv: "شامية الشام المغرب اردن لبنان jordan lebanon levant",
+    intl: "اجنبية اجنبي عالمية international",
+  };
+  var GL = {};
+  ROASTER_GROUPS.forEach(function (g) {
+    GL[g[0]] = g[1];
+  });
+  function nz(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[ً-ٟـ]/g, "")
+      .replace(/[أإآ]/g, "ا")
+      .replace(/ة/g, "ه")
+      .replace(/ى/g, "ي")
+      .replace(/[\s\-_.()+&'’%]/g, "");
+  }
+  // Name, Arabic spelling and country match from the first letter; region words ("خليجية", "مصر") only from 3 letters, so
+  // one letter does not match a whole region.
+  var HAY = ROASTERS.map(function (r) {
+    return [r.n, r.a, r.c].map(nz).join("|");
+  });
+  var HAYK = ROASTERS.map(function (r) {
+    return [GL[r.g], KW[r.g]].map(nz).join("|");
+  });
+  function hit(hay, toks, kw) {
+    return toks.every(function (t) {
+      return hay.indexOf(t) > -1 || (kw && t.length >= 3 && kw.indexOf(t) > -1);
+    });
+  }
+  var box = $("roasterSug"),
+    inp = $("roaster"),
+    cur = -1,
+    hideT = 0;
+  function items() {
+    return box.querySelectorAll(".sug-i");
+  }
+  function hide() {
+    box.hidden = true;
+    inp.setAttribute("aria-expanded", "false");
+    cur = -1;
+  }
+  function draw() {
+    var q = inp.value.trim(),
+      toks = q.split(/\s+/).map(nz).filter(Boolean),
+      h = "",
+      n = 0;
+    var saved = beans
+      .filter(function (b) {
+        return (
+          toks.length &&
+          hit([b.f.roaster, b.f.coffee, b.f.origin].map(nz).join("|"), toks)
+        );
+      })
+      .slice(0, 6);
+    if (saved.length) {
+      h += '<div class="sug-h">محاصيلك المحفوظة</div>';
+      saved.forEach(function (b) {
+        h +=
+          '<button type="button" class="sug-i" data-b="' +
+          esc(b.id) +
+          '"><b>' +
+          esc(b.f.coffee || "") +
+          "</b><span>" +
+          esc(b.f.roaster || "") +
+          "</span></button>";
+      });
+    }
+    ROASTER_GROUPS.forEach(function (g) {
+      var rows = [];
+      ROASTERS.forEach(function (r, i) {
+        if (r.g === g[0] && (!toks.length || hit(HAY[i], toks, HAYK[i])))
+          rows.push(r);
+      });
+      if (toks.length)
+        rows.sort(function (a, b) {
+          return (
+            (nz(a.n).indexOf(toks[0]) === 0 ? 0 : 1) -
+            (nz(b.n).indexOf(toks[0]) === 0 ? 0 : 1)
+          );
+        });
+      // Empty search: a few from every group so each one is visible; with a search, as many as fit.
+      rows = toks.length ? rows.slice(0, Math.max(0, 40 - n)) : rows.slice(0, 5);
+      if (!rows.length) return;
+      n += rows.length;
+      h += '<div class="sug-h">' + esc(g[1]) + "</div>";
+      rows.forEach(function (r) {
+        h +=
+          '<button type="button" class="sug-i" data-r="' +
+          esc(r.n) +
+          '"><b>' +
+          esc(r.n) +
+          "</b><span>" +
+          esc(r.a || r.c || "") +
+          "</span></button>";
+      });
+    });
+    if (h && !toks.length)
+      h +=
+        '<div class="sug-f">اكتب اسم المحمصة، أو كلمة مثل: سعودية، خليجية، مصرية، أجنبية</div>';
+    // Exactly what is typed already: nothing left to suggest.
+    var only = ROASTERS.filter(function (r) {
+      return r.n.toLowerCase() === q.toLowerCase();
+    });
+    if (!h || (only.length && !saved.length && n === 1)) return hide();
+    box.innerHTML = h;
+    box.hidden = false;
+    inp.setAttribute("aria-expanded", "true");
+    cur = -1;
+  }
+  function pick(el) {
+    if (!el) return;
+    clearTimeout(hideT);
+    if (el.dataset.r != null) {
+      inp.value = el.dataset.r;
+      hide();
+      render();
+      $("coffee").focus();
+    } else if (el.dataset.b != null) {
+      hide();
+      inp.blur();
+      applyBean(el.dataset.b);
+    }
+  }
+  function move(d) {
+    var a = items();
+    if (!a.length) return;
+    if (cur > -1) a[cur].classList.remove("on");
+    cur = (cur + d + a.length) % a.length;
+    a[cur].classList.add("on");
+    a[cur].scrollIntoView({ block: "nearest" });
+  }
+  inp.addEventListener("focus", draw);
+  inp.addEventListener("input", draw);
+  inp.addEventListener("blur", function () {
+    hideT = setTimeout(hide, 150);
+  });
+  inp.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") hide();
+    else if (e.key === "ArrowDown") {
+      if (box.hidden) draw();
+      move(1);
+      e.preventDefault();
+    } else if (e.key === "ArrowUp") {
+      move(-1);
+      e.preventDefault();
+    } else if (e.key === "Enter" && cur > -1 && !box.hidden) {
+      e.preventDefault();
+      pick(items()[cur]);
+    }
+  });
+  // mousedown would take the focus away from the field before the click lands
+  box.addEventListener("mousedown", function (e) {
+    e.preventDefault();
+  });
+  box.addEventListener("click", function (e) {
+    pick(e.target.closest(".sug-i"));
+  });
+  return { draw: draw, hide: hide };
+})();
+
 // ================= أرشيف المحاصيل والتحضيرة السابقة =================
 var BEANS_KEY = "brewlog-beans-v1";
 var BEAN_IDS = [

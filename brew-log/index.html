@@ -646,6 +646,9 @@
               نسخ الكل
             </button>
             <button type="button" class="btn" id="share" hidden>مشاركة</button>
+            <button type="button" class="btn" id="dcOpen" hidden>
+              📨 انشر في ديسكورد
+            </button>
           </div>
           <div class="hint" id="msg">
             اختر التاقات المذكورة فوق من ديسكورد بعد ما تلصق العنوان.
@@ -670,10 +673,35 @@
 
     <div id="toast" role="status" aria-live="polite" hidden></div>
 
+    <div class="dc-modal" id="dcModal" hidden role="dialog" aria-modal="true" aria-labelledby="dcTitle">
+      <div class="dc-box">
+        <h2 id="dcTitle">📨 انشر في ديسكورد</h2>
+        <div class="dc-prev" id="dcPrev"></div>
+        <label
+          >رابط منشور المحصول (اختياري)
+          <input
+            type="url"
+            id="dcThread"
+            inputmode="url"
+            autocomplete="off"
+            placeholder="https://discord.com/channels/..."
+          />
+        </label>
+        <div class="hint">
+          مع الرابط يضاف كرد داخل منشور المحصول. بدونه ينفتح منشور جديد بالعنوان والتاقات. يُرسل النص فقط.
+        </div>
+        <div class="hint" id="dcHint" aria-live="polite"></div>
+        <div class="dc-actions">
+          <button type="button" class="btn p" id="dcSend">إرسال</button>
+          <button type="button" class="btn" id="dcCancel">إلغاء</button>
+        </div>
+      </div>
+    </div>
     <script
       src="https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.min.js"
       defer
     ></script>
+    <script src="discord-config.js"></script>
     <script src="grinders.js"></script>
     <script src="roasters.js"></script>
     <script src="recipes.js"></script>

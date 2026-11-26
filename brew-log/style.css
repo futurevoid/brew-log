@@ -2284,3 +2284,48 @@ details.hint summary {
 .timer-guide:empty {
   display: none;
 }
+
+/* Send to Discord dialog (hidden unless discord-config.js turns it on) */
+.dc-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(20, 14, 10, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+}
+.dc-modal[hidden] {
+  display: none;
+}
+.dc-box {
+  background: var(--card);
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 16px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dc-box h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.dc-prev {
+  background: var(--surface);
+  border: 1px solid var(--bd);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.dc-actions {
+  display: flex;
+  gap: 8px;
+}
+.dc-actions .btn {
+  flex: 1;
+}

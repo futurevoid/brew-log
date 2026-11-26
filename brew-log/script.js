@@ -2717,6 +2717,88 @@ $("beanFold").onclick = function () {
 $("beanDel").onclick = delBean;
 $("lastCopy").onclick = applyLast;
 
+// ================= النشر في ديسكورد (مخفي حتى يُفعَّل في discord-config.js) =================
+// Sends the post text (never a photo) to the site's own api/discord.js, which holds the webhook. A link to the coffee's forum post
+// makes it a reply in that post; without one it opens a new forum post with the title and tags. The link is remembered per coffee.
+(function () {
+  if (typeof DISCORD_ENABLED === "undefined" || !DISCORD_ENABLED || !DISCORD_ENDPOINT) return;
+  var DC_KEY = "brewlog-threads-v1";
+  function threads() {
+    try {
+      return JSON.parse(localStorage.getItem(DC_KEY) || "{}") || {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function remember(k, u) {
+    if (!k) return;
+    var t = threads();
+    if (u) t[k] = u;
+    else delete t[k];
+    try {
+      localStorage.setItem(DC_KEY, JSON.stringify(t));
+    } catch (e) {}
+  }
+  function tagNames() {
+    return [].slice.call(document.querySelectorAll("#tags .tg")).map(function (x) {
+      return x.textContent.trim();
+    });
+  }
+  function close() {
+    $("dcModal").hidden = true;
+  }
+  function open() {
+    if (!val("roaster") || !val("coffee")) {
+      toast("عبّ المحمصة والمحصول أول");
+      return;
+    }
+    var tg = tagNames();
+    $("dcPrev").innerHTML =
+      "<b>" + esc($("title").textContent) + "</b>" + (tg.length ? '<div class="hint">' + tg.map(esc).join(" · ") + "</div>" : "");
+    $("dcThread").value = threads()[curKey()] || "";
+    $("dcHint").textContent = "";
+    $("dcSend").disabled = false;
+    $("dcModal").hidden = false;
+  }
+  function submit() {
+    var link = $("dcThread").value.trim();
+    $("dcSend").disabled = true;
+    $("dcHint").textContent = "جاري الإرسال…";
+    fetch(DISCORD_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: $("title").textContent.trim(), body: $("out").value, tags: tagNames(), threadUrl: link }),
+    })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          return { ok: r.ok && j.ok, j: j };
+        });
+      })
+      .then(function (x) {
+        if (!x.ok) throw new Error((x.j && x.j.error) || "ما انرسل");
+        // A new post's link is kept so the next brew of this coffee can reply in it.
+        if (!link && x.j.url) remember(curKey(), x.j.url);
+        else if (link) remember(curKey(), link);
+        close();
+        toast(link ? "انرسل كرد في المنشور ✓" : "انرسل كمنشور جديد ✓", x.j.url ? ["افتح", function () { window.open(x.j.url, "_blank", "noopener"); }] : null, 7000);
+      })
+      .catch(function (e) {
+        $("dcSend").disabled = false;
+        $("dcHint").textContent = e && e.message ? e.message : "ما انرسل، جرّب مرة ثانية";
+      });
+  }
+  $("dcOpen").hidden = false;
+  $("dcOpen").addEventListener("click", open);
+  $("dcCancel").addEventListener("click", close);
+  $("dcSend").addEventListener("click", submit);
+  $("dcModal").addEventListener("click", function (e) {
+    if (e.target === $("dcModal")) close();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !$("dcModal").hidden) close();
+  });
+})();
+
 // ================= معاينة البوست كنافذة من تحت (الجوال) =================
 function openSheet() {
   $("sidePanel").classList.add("open");

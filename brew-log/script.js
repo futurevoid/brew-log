@@ -2222,8 +2222,9 @@ var roasterPick = (function () {
             (nz(b.n).indexOf(toks[0]) === 0 ? 0 : 1)
           );
         });
-      // Empty search: a few from every group so each one is visible; with a search, as many as fit.
-      rows = toks.length ? rows.slice(0, Math.max(0, 40 - n)) : rows.slice(0, 5);
+      // Empty search: every Saudi roaster first, then a few from each other group so each one is visible; with a search, as
+      // many as fit (Saudi first there too, since the groups keep this order).
+      rows = toks.length ? rows.slice(0, Math.max(0, 40 - n)) : g[0] === "sa" ? rows : rows.slice(0, 5);
       if (!rows.length) return;
       n += rows.length;
       h += '<div class="sug-h">' + esc(g[1]) + "</div>";

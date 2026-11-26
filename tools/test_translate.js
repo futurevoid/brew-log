@@ -8,13 +8,13 @@ var M=ctx.M,T=ctx.T,fails=0;
 function check(name,ok,info){console.log((ok?"PASS ":"FAIL ")+name+(info?"  "+info:""));if(!ok)fails++}
 
 var C40=M.find("Comandante C40 MK4"),KU=M.find("1Zpresso K-Ultra"),ESP=M.find("Baratza Encore ESP");
-var dC40=M.dial(C40),dKU=M.dial(KU),dESP=M.dial(ESP);
+var dC40=T.dial(M,C40),dKU=T.dial(M,KU),dESP=T.dial(M,ESP);
 // Made-up "true" grinders: D50 grows smoothly with the setting (slightly curved, like real burrs).
 function trueC40(i){return 40+29*i-0.12*i*i}
 function trueKU(i){return 60+6.6*i+0.004*i*i}
 function hist(d50){var h=[];for(var k=0;k<16;k++){var x=100*Math.pow(20,(k+0.5)/16);h.push(Math.exp(-Math.pow(Math.log(x/d50),2)/0.2))}var s=h.reduce(function(a,b){return a+b},0);return h.map(function(v){return v/s})}
 var id=0;
-function sample(key,i,d50,t){return {id:"s"+(++id),t:t||id,grinder:key,idx:i,setting:key?M.dial(key).labels[i]:null,calib:true,d50:d50,hist:hist(d50),under:0,over:0,fines:{100:0.02,150:0.05,200:0.1}}}
+function sample(key,i,d50,t){return {id:"s"+(++id),t:t||id,grinder:key,idx:i,setting:key?T.dial(M,key).labels[i]:null,calib:true,d50:d50,hist:hist(d50),under:0,over:0,fines:{100:0.02,150:0.05,200:0.1}}}
 
 var S=[];
 [10,16,22,28,34].forEach(function(i){S.push(sample(C40,i,trueC40(i)))});
@@ -55,7 +55,7 @@ for(var s=12;s<=33;s++){
 check("round trip C40 -> K-Ultra -> C40 within one step",tried>=10&&worst<=1,"worst "+worst+" over "+tried+" settings, "+flagged+" flagged outside");
 
 // Grinder without calibration.
-var TC3=M.find("Timemore C3"),dTC3=M.dial(TC3);
+var TC3=M.find("Timemore C3"),dTC3=T.dial(M,TC3);
 var blocked=T.translate(photo,TC3,dTC3,S,{allowEst:false});
 check("uncalibrated + measured-only is blocked",blocked.blocked&&blocked.need===4);
 var est=T.translate(photo,TC3,dTC3,S,{allowEst:true});
@@ -88,7 +88,7 @@ check("latest vs previous at same setting",lp&&lp[0].t===400&&lp[1].t===200);
 
 
 // Real measurements: five 1Zpresso Q Air photos at 1.5.0, 2.0.0, 2.3.2, 3.0.0, 3.5.0 (chart 510..1190 um).
-var QA=M.find("1Zpresso Q Air"),dQA=M.dial(QA),qS=[];
+var QA=M.find("1Zpresso Q Air"),dQA=T.dial(M,QA),qS=[];
 [["1.5.0",751],["2.0.0",951],["2.3.2",1074],["3.0.0",1369],["3.5.0",1529]].forEach(function(p){var r=M.calc(QA,p[0]);qS.push(sample(QA,Math.round(r.i),p[1]))});
 var rg=T.regress(qS,QA,dQA);
 check("Q Air regression ready",!!rg&&rg.n===5,rg?"leave-one-out ±"+rg.acc.toFixed(1)+"%":"");

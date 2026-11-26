@@ -88,7 +88,7 @@
   }
 
   // Closest setting on grinder `key` for a measured sample.
-  // dial: Micron.dial(key). opts: {allowEst}. Returns
+  // dial: dial(Micron,key). opts: {allowEst}. Returns
   // {measured, idx, setting, d50 (expected at that setting), acc, overlap, outside} or {blocked, need}.
   function translate(sample,key,dial,samples,opts){
     opts=opts||{};
@@ -189,7 +189,17 @@
     return refCache;
   }
 
-  var api={MIN_SETTINGS:MIN_SETTINGS,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
+  // A grinder's dial as its chart lists it, built from the shared Micron API (Micron.steps and Micron.norm), so the converter
+  // needs nothing from micron.js beyond what the brew log already has. labels: the dial in order; uniq[i]: position i is the
+  // first one with its label (repeated labels are just spacing); um(i): the chart's micron estimate at any position.
+  function dial(M,key){
+    var s=M.steps(key);if(!s)return null;
+    var n=s.labels.map(M.norm),first=Object.create(null),last=s.labels.length-1;
+    n.forEach(function(x,i){if(!(x in first))first[x]=i});
+    return {labels:s.labels,uniq:n.map(function(x,i){return first[x]===i}),lo:s.lo,hi:s.hi,um:function(i){return Math.round(s.lo+(s.hi-s.lo)*i/last)}};
+  }
+
+  var api={dial:dial,MIN_SETTINGS:MIN_SETTINGS,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
     contribution:contribution,extrapolate:extrapolate,regress:regress,reference:reference,wear:wear,busiest:busiest,latestPair:latestPair};
   if(typeof module==="object"&&module.exports)module.exports=api;else root.GrindTranslate=api;
 })(typeof self!=="undefined"?self:this);

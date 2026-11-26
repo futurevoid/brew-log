@@ -1708,12 +1708,22 @@ function render() {
   save();
 }
 document.addEventListener("input", function (e) {
-  if (e.target.id === "pyrCustomIn" || e.target.id === "varQ") return;
+  if (
+    e.target.id === "pyrCustomIn" ||
+    e.target.id === "varQ" ||
+    e.target.id === "varPickSel"
+  )
+    return;
   if (e.target.type === "range") e.target.dataset.touched = "1";
   render();
 });
 document.addEventListener("change", function (e) {
-  if (e.target.id === "pyrCustomIn" || e.target.id === "varQ") return;
+  if (
+    e.target.id === "pyrCustomIn" ||
+    e.target.id === "varQ" ||
+    e.target.id === "varPickSel"
+  )
+    return;
   render();
 });
 
@@ -1881,27 +1891,22 @@ var varPick = (function () {
     var list = chosen();
     if (!has(list, exact || x)) list.push(exact || x);
     $("varQ").value = "";
+    $("varOther").hidden = true;
     put(list);
   }
+  // The dropdown lists the varieties not chosen yet; the chosen ones are the pills above it.
   function drawList() {
-    var q = $("varQ").value.trim().toLowerCase(),
-      list = chosen();
-    var hits = VARIETIES.filter(function (v) {
-      return !has(list, v) && (!q || v.toLowerCase().indexOf(q) > -1);
-    });
-    $("varList").innerHTML = hits.length
-      ? hits
-          .map(function (v) {
-            return (
-              '<button type="button" class="vchip" data-v="' +
-              esc(v) +
-              '">' +
-              esc(v) +
-              "</button>"
-            );
-          })
-          .join("")
-      : '<span class="hint">ما فيه سلالة بهذا الاسم. اكتبها واضغط «أضف».</span>';
+    var list = chosen();
+    $("varPickSel").innerHTML =
+      '<option value="">+ أضف سلالة</option>' +
+      VARIETIES.filter(function (v) {
+        return !has(list, v);
+      })
+        .map(function (v) {
+          return '<option value="' + esc(v) + '">' + esc(v) + "</option>";
+        })
+        .join("") +
+      '<option value="__o">سلالة أخرى…</option>';
   }
   function draw() {
     var list = chosen();
@@ -1937,14 +1942,17 @@ var varPick = (function () {
       }),
     );
   });
-  $("varList").addEventListener("click", function (e) {
-    var b = e.target.closest("[data-v]");
-    if (b) add(b.getAttribute("data-v"));
+  $("varPickSel").addEventListener("change", function () {
+    var v = this.value;
+    this.value = "";
+    if (v === "__o") {
+      $("varOther").hidden = false;
+      $("varQ").focus();
+    } else if (v) add(v);
   });
   $("varAdd").addEventListener("click", function () {
     add($("varQ").value);
   });
-  $("varQ").addEventListener("input", drawList);
   $("varQ").addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -2436,6 +2444,7 @@ function snap() {
       if (
         e.id !== "gq" &&
         e.id !== "varQ" &&
+        e.id !== "varPickSel" &&
         e.id !== "pyrCustomIn" &&
         e.type !== "range"
       )

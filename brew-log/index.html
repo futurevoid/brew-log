@@ -135,17 +135,17 @@
                 <input type="hidden" id="variety" />
                 <input type="hidden" id="variety_o" />
                 <div class="vsel" id="varSel" aria-live="polite"></div>
-                <div class="vadd">
+                <select id="varPickSel" aria-labelledby="varLbl"></select>
+                <div class="vadd" id="varOther" hidden>
                   <input
-                    type="search"
+                    type="text"
                     id="varQ"
-                    placeholder="🔍 ابحث أو اكتب سلالة وأضفها"
+                    placeholder="اكتب اسم السلالة"
                     autocomplete="off"
-                    aria-labelledby="varLbl"
+                    aria-label="اسم السلالة"
                   />
                   <button type="button" class="btn" id="varAdd">+ أضف</button>
                 </div>
-                <div class="vlist" id="varList" role="group" aria-label="السلالات"></div>
               </div>
               <label
                 >درجة التحميص

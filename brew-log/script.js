@@ -805,6 +805,17 @@ var POP = [
   "Wilfa Svart",
 ].map(Micron.find);
 var TAG = { "fiorenzato-pietro": "Pietro" };
+// Forum tag for each brew method. Only methods that have a tag in the server appear here (a Pulsar of any size
+// takes the Pulsar tag, V60 Suiren the V60 tag); Dragonfly and Hario Switch have none yet.
+var METHOD_TAG = {
+  V60: "V60",
+  "V60 Suiren": "V60",
+  Orea: "Orea",
+  Pulsar: "Pulsar",
+  "Pulsar Large": "Pulsar",
+  "Pulsar Mini": "Pulsar",
+  AeroPress: "AeroPress",
+};
 var ND = "ما لقيت رقم ميكرون منشور لها، فما أحوّل عشان ما أخمّن.";
 var EX = {
   "x-c5": {
@@ -1481,11 +1492,7 @@ function render() {
     var v = $(i).value;
     if (v && v !== "__o") {
       var tg = i === "grinder" ? TAG[v] : v;
-      if (
-        i === "method" &&
-        ["V60", "Orea", "Pulsar", "AeroPress"].indexOf(v) < 0
-      )
-        tg = "";
+      if (i === "method") tg = METHOD_TAG[v] || "";
       if (tg) tl.push(tg);
     } else if (v === "__o" && i === "process") tl.push("معالجة-أخرى");
     else if (v === "__o" && i === "origin") tl.push("دولة أخرى");

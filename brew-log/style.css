@@ -2099,3 +2099,65 @@ details.hint summary {
   font-size: 0.9rem;
   color: var(--acc);
 }
+
+/* Variety: choose more than one */
+.vfield {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.vlabel {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.vsel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.vsel:empty {
+  display: none;
+}
+.vadd {
+  display: flex;
+  gap: 6px;
+}
+.vadd input {
+  flex: 1;
+  min-width: 0;
+}
+.vlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 124px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--bd);
+  border-radius: var(--radius-sm);
+}
+.vchip {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  min-height: 32px;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--bd);
+  border-radius: 99px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.vchip:hover {
+  border-color: var(--bd-focus);
+}
+.vchip.on {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: #fff;
+  font-weight: 600;
+}

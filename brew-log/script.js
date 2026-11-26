@@ -1457,6 +1457,7 @@ function render() {
     $(s.id + "_o").hidden = s.value !== "__o";
   });
   if (dialCtrl) dialCtrl.sync();
+  if (varPick) varPick.sync();
   var mu = mic();
   // A photo measurement from grind.html replaces the chart estimate in the post.
   var gm = null;
@@ -1707,12 +1708,12 @@ function render() {
   save();
 }
 document.addEventListener("input", function (e) {
-  if (e.target.id === "pyrCustomIn") return;
+  if (e.target.id === "pyrCustomIn" || e.target.id === "varQ") return;
   if (e.target.type === "range") e.target.dataset.touched = "1";
   render();
 });
 document.addEventListener("change", function (e) {
-  if (e.target.id === "pyrCustomIn") return;
+  if (e.target.id === "pyrCustomIn" || e.target.id === "varQ") return;
   render();
 });
 
@@ -1830,6 +1831,128 @@ if (navigator.share) {
     navigator.share({ text: t }).catch(function () {});
   };
 }
+
+// ================= السلالة: أكثر من سلالة =================
+// The hidden #variety holds the chosen varieties joined with "، " (an old single value is just a list of one, and an old
+// "other" value is read from #variety_o), so drafts, saved beans and the post line need no other change.
+var VARIETIES = ["74110", "74112", "74148", "74158", "Batian", "Bourbon", "Bourbon Aji", "Catuai", "Caturra", "Castillo", "Chiroso", "Dega", "ETH47", "Field Blend", "Geisha", "Gesha", "Gesha 1931", "Gesha Inca", "Green Tip Gesha", "Heirloom", "Heirloom (إثيوبي محلي)", "Heirloom/Landrace", "Java", "Kurume", "Laurina", "Maragesha", "Mejorado", "Mokka", "Ombligon", "Pacamara", "Parainema", "Pacas", "Pink Bourbon", "Red Bourbon", "Rosado", "Ruiru 11", "Sidra", "SL9", "SL28", "SL34", "Sln9", "Sudan Rume", "Typica", "Villa Sarchi", "Walega", "Wolisho", "Wush Wush", "Yellow Bourbon"];
+var varPick = (function () {
+  var SEP = "، ";
+  var shown = null;
+  function parse(str) {
+    if (str === "__o") str = $("variety_o").value;
+    var seen = {},
+      out = [];
+    String(str || "")
+      .split(/\s*[،,]\s*/)
+      .forEach(function (x) {
+        x = x.trim();
+        if (x && !seen[x.toLowerCase()]) {
+          seen[x.toLowerCase()] = 1;
+          out.push(x);
+        }
+      });
+    return out;
+  }
+  function chosen() {
+    return parse($("variety").value);
+  }
+  function has(list, x) {
+    return list.some(function (y) {
+      return y.toLowerCase() === x.toLowerCase();
+    });
+  }
+  function put(list) {
+    $("variety").value = list.join(SEP);
+    $("variety_o").value = "";
+    draw();
+    render();
+  }
+  function add(x) {
+    x = String(x || "")
+      .replace(/[،,]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+    if (!x) return;
+    var exact = VARIETIES.filter(function (v) {
+      return v.toLowerCase() === x.toLowerCase();
+    })[0];
+    var list = chosen();
+    if (!has(list, exact || x)) list.push(exact || x);
+    $("varQ").value = "";
+    put(list);
+  }
+  function drawList() {
+    var q = $("varQ").value.trim().toLowerCase(),
+      list = chosen();
+    var hits = VARIETIES.filter(function (v) {
+      return !has(list, v) && (!q || v.toLowerCase().indexOf(q) > -1);
+    });
+    $("varList").innerHTML = hits.length
+      ? hits
+          .map(function (v) {
+            return (
+              '<button type="button" class="vchip" data-v="' +
+              esc(v) +
+              '">' +
+              esc(v) +
+              "</button>"
+            );
+          })
+          .join("")
+      : '<span class="hint">ما فيه سلالة بهذا الاسم. اكتبها واضغط «أضف».</span>';
+  }
+  function draw() {
+    var list = chosen();
+    shown = $("variety").value;
+    $("varSel").innerHTML = list
+      .map(function (v) {
+        return (
+          '<button type="button" class="vchip on" data-x="' +
+          esc(v) +
+          '" aria-label="شيل ' +
+          esc(v) +
+          '">' +
+          esc(v) +
+          " ✕</button>"
+        );
+      })
+      .join("");
+    drawList();
+  }
+  // Called from render(): redraw when the value changed from outside (draft load, saved coffee, reset).
+  function sync() {
+    if ($("variety").value === "__o")
+      $("variety").value = parse("__o").join(SEP);
+    if ($("variety").value !== shown) draw();
+  }
+  $("varSel").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-x]");
+    if (!b) return;
+    var x = b.getAttribute("data-x");
+    put(
+      chosen().filter(function (y) {
+        return y.toLowerCase() !== x.toLowerCase();
+      }),
+    );
+  });
+  $("varList").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-v]");
+    if (b) add(b.getAttribute("data-v"));
+  });
+  $("varAdd").addEventListener("click", function () {
+    add($("varQ").value);
+  });
+  $("varQ").addEventListener("input", drawList);
+  $("varQ").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      add($("varQ").value);
+    }
+  });
+  return { sync: sync, add: add, chosen: chosen };
+})();
 
 // ================= أرشيف المحاصيل والتحضيرة السابقة =================
 var BEANS_KEY = "brewlog-beans-v1";
@@ -2310,7 +2433,12 @@ function snap() {
   document
     .querySelectorAll("main input[id],main select[id],main textarea[id]")
     .forEach(function (e) {
-      if (e.id !== "gq" && e.id !== "pyrCustomIn" && e.type !== "range")
+      if (
+        e.id !== "gq" &&
+        e.id !== "varQ" &&
+        e.id !== "pyrCustomIn" &&
+        e.type !== "range"
+      )
         v[e.id] = e.type === "checkbox" ? e.checked : e.value;
     });
   var r = {};
@@ -2392,6 +2520,8 @@ function clearForm() {
   });
   $("addmic").checked = true;
   $("gmeas").value = "";
+  $("variety").value = "";
+  $("variety_o").value = "";
   scores.forEach(function (s) {
     $(s[1]).value = 5;
     $(s[1]).dataset.touched = "0";

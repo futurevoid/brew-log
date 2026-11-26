@@ -813,99 +813,49 @@ var brewTimer = (function () {
   };
 })();
 
-// ================= حساب الصبّات من وصفة =================
-// Pick a recipe (or your own numbers) and a dose, see the pours, and fill the pour table with one tap. The timer then reads the
-// table as its plan (see brewTimer): how much to pour now, and how long is left for this pour.
+// ================= احسب مع الوصفة =================
+// The pours are typed by the user in the pour table. This box calculates alongside them: the target water (dose x ratio), what the
+// table adds up to, what is left, and the time. Two shortcuts are there for convenience and fill the table, which can then be
+// edited like anything typed by hand: a ready recipe (4:6 or Hoffmann, scaled to the dose) and an equal split of the water left.
 var planUI = (function () {
-  var cur = null;
-  function num(id) {
-    return parseFloat($(id).value);
-  }
-  function show(msg) {
-    $("planOut").innerHTML = msg;
-  }
-  function calc() {
-    var id = $("planRecipe").value;
-    $("planCustom").hidden = id !== "custom";
-    $("planApply").disabled = true;
-    cur = null;
-    if (!id) {
-      show("");
-      $("planSrc").textContent = "";
-      return;
-    }
-    var r = Recipes.byId(id);
-    $("planSrc").textContent = r.src;
-    var p = Recipes.plan(id, {
-      dose: num("planDose"),
-      ratio: num("planRatio"),
-      bloomX: $("planBloomX").value,
-      bloomSec: num("planBloomSec"),
-      pours: $("planN").value,
-      gap: num("planGap"),
-      totalSec: parseT($("planEnd").value.trim() || "") || 0,
-    });
-    if (!p) {
-      show('<div class="hint">تأكد من الأرقام: الجرعة من 5 إلى 100 غ، والنسبة من 8 إلى 25.</div>');
-      return;
-    }
-    cur = p;
-    var t = 0,
-      cum = 0;
-    show(
-      p.rows
-        .map(function (x, i) {
-          var row =
-            '<div class="plan-row"><b dir="ltr">' +
-            fmtT(t) +
-            "</b><span>" +
-            x.a +
-            ' مل</span><span class="c">الإجمالي ' +
-            (cum += x.a) +
-            "</span><i>" +
-            esc(x.note || "") +
-            "</i></div>";
-          t += x.d;
-          return row;
-        })
-        .join("") +
-        '<div class="hint">الماء الكلي ' +
-        p.water +
-        " مل · الوقت حوالي " +
-        fmtT(p.total) +
-        (p.temp ? " · الحرارة المقترحة " + p.temp + "°" : "") +
-        "</div>",
-    );
-    $("planApply").disabled = false;
-  }
-  function defaults() {
-    var id = $("planRecipe").value,
-      r = id && Recipes.byId(id);
-    if (!r) return calc();
+  var ratioAuto = false; // the ratio box holds a recipe's own ratio (not something the user typed)
+  function doseNow() {
     var d = parseFloat($("dose").value);
-    $("planDose").value = d > 0 ? d : r.dose;
-    $("planRatio").value = Math.round(r.ratio * 10) / 10;
-    calc();
+    return d > 0 ? d : 0;
   }
-  $("planRecipe").addEventListener("change", defaults);
-  ["planDose", "planRatio", "planBloomX", "planBloomSec", "planN", "planGap", "planEnd"].forEach(function (id) {
-    $(id).addEventListener("input", calc);
-    $(id).addEventListener("change", calc);
-  });
-  $("planApply").addEventListener("click", function () {
-    if (!cur) return;
-    var before = snap(),
-      m = Recipes.byId($("planRecipe").value).method;
-    $("pours").innerHTML = "";
-    cur.rows.forEach(function (x) {
-      addPour([String(x.a), fmtT(x.d), x.note || ""]);
-    });
-    $("dose").value = num("planDose");
-    if (m && !$("method").value) $("method").value = m;
-    $("planBox").open = false;
-    render();
+  function ratioNow() {
+    var r = parseFloat($("planRatio").value);
+    return r >= 8 && r <= 25 ? r : 0;
+  }
+  function target() {
+    var d = doseNow(),
+      r = ratioNow();
+    return d && r ? Math.round(d * r) : 0;
+  }
+  function poured() {
+    return [].slice.call(document.querySelectorAll("#pours .pour .a")).reduce(function (s, x) {
+      return s + (+x.value || 0);
+    }, 0);
+  }
+  // Called from render() with the table's totals.
+  function calc(water, secs) {
+    var d = doseNow(),
+      r = ratioNow(),
+      t = target(),
+      h = "";
+    if (!d) h = '<div class="hint">اكتب الجرعة (فوق) عشان يحسب لك الماء المستهدف.</div>';
+    else if (!r) h = "<div>الجرعة <b>" + d + ' غ</b> · <span class="hint">اكتب النسبة عشان يحسب لك الماء المستهدف.</span></div>';
+    else h = "<div>الماء المستهدف: <b>" + t + ' مل</b> <span class="hint">(' + d + " غ × 1:" + r + ")</span></div>";
+    h += "<div>في الجدول: <b>" + water + " مل</b>" + (secs > 0 ? " · الوقت " + fmtT(secs) : "") + "</div>";
+    if (t && water > 0) {
+      var diff = t - water;
+      h += diff > 0 ? '<div class="left">باقي ' + diff + " مل</div>" : diff < 0 ? '<div class="over">زيادة ' + -diff + " مل عن المستهدف</div>" : '<div class="done">وصلت المستهدف ✓</div>';
+    }
+    $("planCalc").innerHTML = h;
+  }
+  function undoable(msg, before) {
     toast(
-      "تعبّت الصبّات (" + cur.rows.length + ")، وجاهزة للتايمر",
+      msg,
       [
         "تراجع",
         function () {
@@ -915,9 +865,81 @@ var planUI = (function () {
       ],
       6000,
     );
+  }
+  function busy() {
+    if (brewTimer && brewTimer.isRunning()) {
+      toast("أوقف التايمر أول");
+      return true;
+    }
+    return false;
+  }
+  $("planRatio").addEventListener("input", function () {
+    ratioAuto = false;
+  });
+  $("planRecipe").addEventListener("change", function () {
+    var r = this.value && Recipes.byId(this.value);
+    $("planApply").disabled = !r;
+    $("planSrc").textContent = r ? r.src : "";
+    if (r && (!ratioNow() || ratioAuto)) {
+      $("planRatio").value = Math.round(r.ratio * 100) / 100;
+      ratioAuto = true;
+    }
+  });
+  $("planApply").addEventListener("click", function () {
+    var id = $("planRecipe").value,
+      r = id && Recipes.byId(id);
+    if (!r || busy()) return;
+    var d = doseNow() || r.dose,
+      ratio = ratioNow() || r.ratio,
+      p = Recipes.plan(id, { dose: d, ratio: ratio });
+    if (!p) {
+      toast("تأكد من الجرعة (5 إلى 100 غ) والنسبة (8 إلى 25)");
+      return;
+    }
+    var before = snap();
+    $("pours").innerHTML = "";
+    p.rows.forEach(function (x) {
+      addPour([String(x.a), fmtT(x.d), x.note || ""]);
+    });
+    if (!doseNow()) $("dose").value = d;
+    if (!ratioNow()) {
+      $("planRatio").value = Math.round(ratio * 100) / 100;
+      ratioAuto = true;
+    }
+    if (r.method && !$("method").value) $("method").value = r.method;
+    render();
+    undoable("تعبّى الجدول بوصفة " + r.name + ". تقدر تعدّل أي رقم.", before);
     try {
       $("pours").scrollIntoView({ behavior: "smooth", block: "nearest" });
     } catch (e) {}
+  });
+  $("planFill").addEventListener("click", function () {
+    if (busy()) return;
+    var t = target();
+    if (!t) {
+      toast("اكتب الجرعة والنسبة أول");
+      return;
+    }
+    var left = t - poured(),
+      gap = Math.round(+$("planGap").value);
+    if (left <= 0) {
+      toast("الجدول وصل الماء المستهدف، ما فيه باقي");
+      return;
+    }
+    if (!(gap >= 5 && gap <= 180)) {
+      toast("مدة الصبّة من 5 إلى 180 ثانية");
+      return;
+    }
+    var parts = Recipes.equal(left, +$("planN").value),
+      before = snap();
+    [].slice.call(document.querySelectorAll("#pours .pour")).forEach(function (row) {
+      if (!row.querySelector(".a").value.trim() && !row.querySelector(".t").value.trim() && !row.querySelector(".nt input").value.trim()) row.remove();
+    });
+    parts.forEach(function (a) {
+      addPour([String(a), fmtT(gap), ""]);
+    });
+    render();
+    undoable("أضفت " + parts.length + " صبّات من الباقي (" + left + " مل)", before);
   });
   return { calc: calc };
 })();
@@ -1767,6 +1789,7 @@ function render() {
   var totalWater = pourItems.reduce(function (sum, x) {
     return sum + x.a;
   }, 0);
+  if (planUI) planUI.calc(totalWater, run);
   if (pv) {
     if (totalWater > 0) {
       pv.hidden = false;

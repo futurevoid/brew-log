@@ -1397,8 +1397,13 @@ details.hint summary {
 /* ================= Mobile Smart Accordion & Progress Bar (<= 860px) ================= */
 @media (max-width: 860px) {
   .wrap {
-    grid-template-columns: 1fr;
+    /* minmax(0, ...) so the column can be narrower than its widest row (step pills, saved-coffee chips scroll sideways on
+       their own); a plain 1fr grows to fit them and pushes the whole page wider than the phone. */
+    grid-template-columns: minmax(0, 1fr);
     padding-top: 14px;
+  }
+  .wrap > main {
+    min-width: 0;
   }
 
   /* Sticky Top Step Pills */

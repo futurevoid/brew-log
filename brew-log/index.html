@@ -27,7 +27,7 @@
       "
     >
       الجافاسكربت ما اشتغل في هذا المتصفح، فالنموذج ما يشتغل. تأكد إن style.css
-      و script.js و grinders.js و micron.js و dial.js و roasters.js بنفس مجلد index.html،
+      و script.js و grinders.js و micron.js و dial.js و roasters.js و recipes.js بنفس مجلد index.html،
       وافتح الصفحة من متصفح مو من معاينة ديسكورد أو الملفات.
       <div
         id="jserr"
@@ -317,6 +317,92 @@
 
         <fieldset id="poursSet">
           <legend>💧 الوصفة (الصبّات)</legend>
+          <details class="plan" id="planBox">
+            <summary>🧮 احسب الصبّات من وصفة</summary>
+            <div class="plan-in">
+              <label
+                >الوصفة
+                <select id="planRecipe">
+                  <option value="">— اختر وصفة —</option>
+                  <option value="46">4:6 — تتسو كاسويا</option>
+                  <option value="hoff">V60 — جيمس هوفمان</option>
+                  <option value="custom">حسب رغبتي</option>
+                </select>
+              </label>
+              <div class="plan-g">
+                <label
+                  >الجرعة (غ)<input
+                    type="number"
+                    id="planDose"
+                    inputmode="decimal"
+                    min="5"
+                    max="100"
+                    step="0.5"
+                /></label>
+                <label
+                  >النسبة 1:<input
+                    type="number"
+                    id="planRatio"
+                    inputmode="decimal"
+                    min="8"
+                    max="25"
+                    step="0.1"
+                /></label>
+              </div>
+              <div class="plan-g" id="planCustom" hidden>
+                <label
+                  >التفتيح (× الجرعة)
+                  <select id="planBloomX">
+                    <option value="0">بدون</option>
+                    <option value="2" selected>2×</option>
+                    <option value="3">3×</option>
+                  </select>
+                </label>
+                <label
+                  >مدة التفتيح (ث)<input
+                    type="number"
+                    id="planBloomSec"
+                    inputmode="numeric"
+                    min="0"
+                    max="180"
+                    value="40"
+                /></label>
+                <label
+                  >صبّات بعد التفتيح
+                  <select id="planN">
+                    <option>1</option>
+                    <option>2</option>
+                    <option selected>3</option>
+                    <option>4</option>
+                    <option>5</option>
+                    <option>6</option>
+                  </select>
+                </label>
+                <label
+                  >الفاصل بين الصبّات (ث)<input
+                    type="number"
+                    id="planGap"
+                    inputmode="numeric"
+                    min="5"
+                    max="180"
+                    value="30"
+                /></label>
+                <label
+                  >الوقت الكلي (اختياري)<input
+                    type="text"
+                    id="planEnd"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="3:00"
+                /></label>
+              </div>
+              <div id="planOut" class="plan-out"></div>
+              <div class="hint" id="planSrc"></div>
+              <button type="button" class="btn p" id="planApply" disabled>
+                طبّق على الصبّات
+              </button>
+            </div>
+          </details>
           <div class="hint" style="margin: 0 0 10px">
             اكتب مدة كل صبّة (من بداية الصبّة إلى بداية اللي بعدها)، والوقت من
             البداية ينحسب لحاله جنبها. 45 = 0:45، و120 = 1:20، أو اكتبها بنقطتين
@@ -375,6 +461,7 @@
                 </button>
               </div>
             </div>
+            <div class="timer-guide" id="timerGuide" aria-live="polite"></div>
             <div class="timer-main-actions">
               <button type="button" class="btn p timer-next-btn" id="timerNext">
                 الصبّة التالية ⏭️
@@ -589,6 +676,7 @@
     ></script>
     <script src="grinders.js"></script>
     <script src="roasters.js"></script>
+    <script src="recipes.js"></script>
     <script src="micron.js"></script>
     <script src="dial.js"></script>
     <script src="script.js"></script>

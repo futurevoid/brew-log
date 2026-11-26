@@ -2,7 +2,7 @@
 // not; the 9 MB OpenCV.js file is versioned, so it is cached once and served from cache after that.
 var CACHE="brewlog-v3";
 var CV_URL="https://docs.opencv.org/4.10.0/opencv.js";
-var SHELL=["./","index.html","grind.html","style.css","grind.css","script.js","dial.js","grind.js","grind-worker.js","grind-analyze.js","grind-translate.js","grinders.js","roasters.js","micron.js"];
+var SHELL=["./","index.html","grind.html","style.css","grind.css","script.js","dial.js","grind.js","grind-worker.js","grind-analyze.js","grind-translate.js","grinders.js","roasters.js","recipes.js","micron.js"];
 
 self.addEventListener("install",function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(SHELL).catch(function(){})}).then(function(){return self.skipWaiting()}));

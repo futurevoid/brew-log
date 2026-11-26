@@ -386,6 +386,8 @@ var brewTimer = (function () {
     history: [],
     prevTotalTime: "",
     soundOn: true,
+    plan: null,
+    warned: {},
   };
   var tickId = null;
   var wakeLock = null;
@@ -436,6 +438,8 @@ var brewTimer = (function () {
         tone(1046.5, 0.22, 0.26, 0.16);
       } else if (kind === "undo") {
         tone(440, 0, 0.12, 0.12);
+      } else if (kind === "warn") {
+        tone(1000, 0, 0.07, 0.1);
       }
     } catch (e) {}
   }
@@ -530,6 +534,36 @@ var brewTimer = (function () {
     if (amt) meta += " • " + amt + " مل";
     if ($("timerMeta")) $("timerMeta").textContent = meta;
 
+    // Guidance from the plan taken when the timer started: how much to pour now, and how long is left for this pour.
+    var guide = $("timerGuide");
+    if (guide) {
+      var pl = state.plan && state.plan[state.activeIdx],
+        gt = "";
+      if (pl) {
+        var cum = 0;
+        for (var gi = 0; gi <= state.activeIdx; gi++) cum += state.plan[gi].a;
+        if (pl.a > 0) gt = "اصب " + pl.a + " مل · الإجمالي " + cum + " مل";
+        if (pl.d > 0) {
+          var rem = state.elapsedRecorded + pl.d - totalSec,
+            lastRow = state.activeIdx === state.plan.length - 1,
+            wk = String(state.activeIdx);
+          gt +=
+            (gt ? " · " : "") +
+            (rem > 0 ? "باقي " + fmtT(rem) : lastRow ? "جاهز للإنهاء" : "جاهز للصبّة التالية");
+          if (rem <= 0 && !state.warned[wk]) {
+            state.warned[wk] = 1;
+            beep("next");
+            vib(25);
+          } else if (rem > 0 && rem <= 3 && !state.warned[wk + "w"]) {
+            state.warned[wk + "w"] = 1;
+            beep("warn");
+            vib(8);
+          }
+        }
+      }
+      guide.textContent = gt;
+    }
+
     if ($("timerUndo")) $("timerUndo").disabled = state.history.length === 0;
   }
 
@@ -563,6 +597,8 @@ var brewTimer = (function () {
     state.activeIdx = 0;
     state.history = [];
     state.prevTotalTime = $("time").value;
+    state.plan = snapshotPlan();
+    state.warned = {};
 
     acquireWakeLock();
     beep("start");
@@ -570,6 +606,21 @@ var brewTimer = (function () {
     startLoop();
     syncDockUI(true);
     persist();
+  }
+
+  // The table as it is when the timer starts becomes the plan (the timer then overwrites the times with the real ones).
+  function snapshotPlan() {
+    var p = rows().map(function (r) {
+      return {
+        a: +r.querySelector(".a").value || 0,
+        d: parseT(r.querySelector(".t").value.trim()) || 0,
+      };
+    });
+    return p.some(function (x) {
+      return x.a > 0 || x.d > 0;
+    })
+      ? p
+      : null;
   }
 
   function nextPour() {
@@ -632,6 +683,7 @@ var brewTimer = (function () {
     }
     state.activeIdx = last.idx;
     state.elapsedRecorded = last.prevElapsed;
+    state.warned = {};
 
     beep("undo");
     vib(12);
@@ -730,6 +782,8 @@ var brewTimer = (function () {
         state.activeIdx = saved.activeIdx || 0;
         state.history = Array.isArray(saved.history) ? saved.history : [];
         state.prevTotalTime = saved.prevTotalTime || "";
+        state.plan = Array.isArray(saved.plan) ? saved.plan : null;
+        state.warned = saved.warned || {};
         if (typeof mobileAcc !== "undefined") mobileAcc.openIdx(2, false);
         acquireWakeLock();
         startLoop();
@@ -757,6 +811,115 @@ var brewTimer = (function () {
       return state.running;
     },
   };
+})();
+
+// ================= حساب الصبّات من وصفة =================
+// Pick a recipe (or your own numbers) and a dose, see the pours, and fill the pour table with one tap. The timer then reads the
+// table as its plan (see brewTimer): how much to pour now, and how long is left for this pour.
+var planUI = (function () {
+  var cur = null;
+  function num(id) {
+    return parseFloat($(id).value);
+  }
+  function show(msg) {
+    $("planOut").innerHTML = msg;
+  }
+  function calc() {
+    var id = $("planRecipe").value;
+    $("planCustom").hidden = id !== "custom";
+    $("planApply").disabled = true;
+    cur = null;
+    if (!id) {
+      show("");
+      $("planSrc").textContent = "";
+      return;
+    }
+    var r = Recipes.byId(id);
+    $("planSrc").textContent = r.src;
+    var p = Recipes.plan(id, {
+      dose: num("planDose"),
+      ratio: num("planRatio"),
+      bloomX: $("planBloomX").value,
+      bloomSec: num("planBloomSec"),
+      pours: $("planN").value,
+      gap: num("planGap"),
+      totalSec: parseT($("planEnd").value.trim() || "") || 0,
+    });
+    if (!p) {
+      show('<div class="hint">تأكد من الأرقام: الجرعة من 5 إلى 100 غ، والنسبة من 8 إلى 25.</div>');
+      return;
+    }
+    cur = p;
+    var t = 0,
+      cum = 0;
+    show(
+      p.rows
+        .map(function (x, i) {
+          var row =
+            '<div class="plan-row"><b dir="ltr">' +
+            fmtT(t) +
+            "</b><span>" +
+            x.a +
+            ' مل</span><span class="c">الإجمالي ' +
+            (cum += x.a) +
+            "</span><i>" +
+            esc(x.note || "") +
+            "</i></div>";
+          t += x.d;
+          return row;
+        })
+        .join("") +
+        '<div class="hint">الماء الكلي ' +
+        p.water +
+        " مل · الوقت حوالي " +
+        fmtT(p.total) +
+        (p.temp ? " · الحرارة المقترحة " + p.temp + "°" : "") +
+        "</div>",
+    );
+    $("planApply").disabled = false;
+  }
+  function defaults() {
+    var id = $("planRecipe").value,
+      r = id && Recipes.byId(id);
+    if (!r) return calc();
+    var d = parseFloat($("dose").value);
+    $("planDose").value = d > 0 ? d : r.dose;
+    $("planRatio").value = Math.round(r.ratio * 10) / 10;
+    calc();
+  }
+  $("planRecipe").addEventListener("change", defaults);
+  ["planDose", "planRatio", "planBloomX", "planBloomSec", "planN", "planGap", "planEnd"].forEach(function (id) {
+    $(id).addEventListener("input", calc);
+    $(id).addEventListener("change", calc);
+  });
+  $("planApply").addEventListener("click", function () {
+    if (!cur) return;
+    var before = snap(),
+      m = Recipes.byId($("planRecipe").value).method;
+    $("pours").innerHTML = "";
+    cur.rows.forEach(function (x) {
+      addPour([String(x.a), fmtT(x.d), x.note || ""]);
+    });
+    $("dose").value = num("planDose");
+    if (m && !$("method").value) $("method").value = m;
+    $("planBox").open = false;
+    render();
+    toast(
+      "تعبّت الصبّات (" + cur.rows.length + ")، وجاهزة للتايمر",
+      [
+        "تراجع",
+        function () {
+          load(before);
+          render();
+        },
+      ],
+      6000,
+    );
+    try {
+      $("pours").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (e) {}
+  });
+  return { calc: calc };
 })();
 
 // ================= الطواحين والميكرون =================

@@ -1,7 +1,23 @@
-window.onerror = function (m, u, l) {
-  var e = document.getElementById("jserr");
-  if (e) e.textContent = String(m) + " (line " + l + ")";
-};
+(function(){
+  function show(msg){
+    try{
+      var b=document.getElementById("errbar");
+      if(!b){
+        b=document.createElement("div");b.id="errbar";b.setAttribute("role","alert");
+        b.style.cssText="position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#b3261e;color:#fff;padding:10px 14px;border-radius:12px;font:600 13px/1.7 system-ui,sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.35)";
+        b.innerHTML='<div>صار خطأ غير متوقع. جرّب مرة ثانية، ولو تكرر أرسل لي الرسالة اللي تحت.</div><div id="errtxt" dir="ltr" style="font-weight:400;font-size:12px;opacity:.9;word-break:break-word"></div><button type="button" style="margin-top:6px;background:#fff;color:#b3261e;border:0;border-radius:8px;padding:4px 12px;font:700 13px system-ui,sans-serif">إغلاق</button>';
+        b.querySelector("button").onclick=function(){b.remove()};
+        document.body.appendChild(b);
+      }
+      b.querySelector("#errtxt").textContent=String(msg).slice(0,300);
+    }catch(e){}
+  }
+  window.onerror=function(m,u,l){
+    var e=document.getElementById("jserr");if(e)e.textContent=String(m)+" (line "+l+")";
+    show(String(m)+" (line "+l+")");
+  };
+  window.addEventListener("unhandledrejection",function(ev){var r=ev.reason;show("Promise: "+(r&&r.message?r.message:r));});
+})();
 
 var $ = function (i) {
   return document.getElementById(i);

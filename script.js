@@ -386,6 +386,8 @@ var brewTimer = (function () {
     history: [],
     prevTotalTime: "",
     soundOn: true,
+    plan: null,
+    warned: {},
   };
   var tickId = null;
   var wakeLock = null;
@@ -436,6 +438,8 @@ var brewTimer = (function () {
         tone(1046.5, 0.22, 0.26, 0.16);
       } else if (kind === "undo") {
         tone(440, 0, 0.12, 0.12);
+      } else if (kind === "warn") {
+        tone(1000, 0, 0.07, 0.1);
       }
     } catch (e) {}
   }
@@ -530,6 +534,36 @@ var brewTimer = (function () {
     if (amt) meta += " • " + amt + " مل";
     if ($("timerMeta")) $("timerMeta").textContent = meta;
 
+    // Guidance from the plan taken when the timer started: how much to pour now, and how long is left for this pour.
+    var guide = $("timerGuide");
+    if (guide) {
+      var pl = state.plan && state.plan[state.activeIdx],
+        gt = "";
+      if (pl) {
+        var cum = 0;
+        for (var gi = 0; gi <= state.activeIdx; gi++) cum += state.plan[gi].a;
+        if (pl.a > 0) gt = "اصب " + pl.a + " مل · الإجمالي " + cum + " مل";
+        if (pl.d > 0) {
+          var rem = state.elapsedRecorded + pl.d - totalSec,
+            lastRow = state.activeIdx === state.plan.length - 1,
+            wk = String(state.activeIdx);
+          gt +=
+            (gt ? " · " : "") +
+            (rem > 0 ? "باقي " + fmtT(rem) : lastRow ? "جاهز للإنهاء" : "جاهز للصبّة التالية");
+          if (rem <= 0 && !state.warned[wk]) {
+            state.warned[wk] = 1;
+            beep("next");
+            vib(25);
+          } else if (rem > 0 && rem <= 3 && !state.warned[wk + "w"]) {
+            state.warned[wk + "w"] = 1;
+            beep("warn");
+            vib(8);
+          }
+        }
+      }
+      guide.textContent = gt;
+    }
+
     if ($("timerUndo")) $("timerUndo").disabled = state.history.length === 0;
   }
 
@@ -563,6 +597,8 @@ var brewTimer = (function () {
     state.activeIdx = 0;
     state.history = [];
     state.prevTotalTime = $("time").value;
+    state.plan = snapshotPlan();
+    state.warned = {};
 
     acquireWakeLock();
     beep("start");
@@ -570,6 +606,21 @@ var brewTimer = (function () {
     startLoop();
     syncDockUI(true);
     persist();
+  }
+
+  // The table as it is when the timer starts becomes the plan (the timer then overwrites the times with the real ones).
+  function snapshotPlan() {
+    var p = rows().map(function (r) {
+      return {
+        a: +r.querySelector(".a").value || 0,
+        d: parseT(r.querySelector(".t").value.trim()) || 0,
+      };
+    });
+    return p.some(function (x) {
+      return x.a > 0 || x.d > 0;
+    })
+      ? p
+      : null;
   }
 
   function nextPour() {
@@ -632,6 +683,7 @@ var brewTimer = (function () {
     }
     state.activeIdx = last.idx;
     state.elapsedRecorded = last.prevElapsed;
+    state.warned = {};
 
     beep("undo");
     vib(12);
@@ -730,6 +782,8 @@ var brewTimer = (function () {
         state.activeIdx = saved.activeIdx || 0;
         state.history = Array.isArray(saved.history) ? saved.history : [];
         state.prevTotalTime = saved.prevTotalTime || "";
+        state.plan = Array.isArray(saved.plan) ? saved.plan : null;
+        state.warned = saved.warned || {};
         if (typeof mobileAcc !== "undefined") mobileAcc.openIdx(2, false);
         acquireWakeLock();
         startLoop();
@@ -757,6 +811,115 @@ var brewTimer = (function () {
       return state.running;
     },
   };
+})();
+
+// ================= حساب الصبّات من وصفة =================
+// Pick a recipe (or your own numbers) and a dose, see the pours, and fill the pour table with one tap. The timer then reads the
+// table as its plan (see brewTimer): how much to pour now, and how long is left for this pour.
+var planUI = (function () {
+  var cur = null;
+  function num(id) {
+    return parseFloat($(id).value);
+  }
+  function show(msg) {
+    $("planOut").innerHTML = msg;
+  }
+  function calc() {
+    var id = $("planRecipe").value;
+    $("planCustom").hidden = id !== "custom";
+    $("planApply").disabled = true;
+    cur = null;
+    if (!id) {
+      show("");
+      $("planSrc").textContent = "";
+      return;
+    }
+    var r = Recipes.byId(id);
+    $("planSrc").textContent = r.src;
+    var p = Recipes.plan(id, {
+      dose: num("planDose"),
+      ratio: num("planRatio"),
+      bloomX: $("planBloomX").value,
+      bloomSec: num("planBloomSec"),
+      pours: $("planN").value,
+      gap: num("planGap"),
+      totalSec: parseT($("planEnd").value.trim() || "") || 0,
+    });
+    if (!p) {
+      show('<div class="hint">تأكد من الأرقام: الجرعة من 5 إلى 100 غ، والنسبة من 8 إلى 25.</div>');
+      return;
+    }
+    cur = p;
+    var t = 0,
+      cum = 0;
+    show(
+      p.rows
+        .map(function (x, i) {
+          var row =
+            '<div class="plan-row"><b dir="ltr">' +
+            fmtT(t) +
+            "</b><span>" +
+            x.a +
+            ' مل</span><span class="c">الإجمالي ' +
+            (cum += x.a) +
+            "</span><i>" +
+            esc(x.note || "") +
+            "</i></div>";
+          t += x.d;
+          return row;
+        })
+        .join("") +
+        '<div class="hint">الماء الكلي ' +
+        p.water +
+        " مل · الوقت حوالي " +
+        fmtT(p.total) +
+        (p.temp ? " · الحرارة المقترحة " + p.temp + "°" : "") +
+        "</div>",
+    );
+    $("planApply").disabled = false;
+  }
+  function defaults() {
+    var id = $("planRecipe").value,
+      r = id && Recipes.byId(id);
+    if (!r) return calc();
+    var d = parseFloat($("dose").value);
+    $("planDose").value = d > 0 ? d : r.dose;
+    $("planRatio").value = Math.round(r.ratio * 10) / 10;
+    calc();
+  }
+  $("planRecipe").addEventListener("change", defaults);
+  ["planDose", "planRatio", "planBloomX", "planBloomSec", "planN", "planGap", "planEnd"].forEach(function (id) {
+    $(id).addEventListener("input", calc);
+    $(id).addEventListener("change", calc);
+  });
+  $("planApply").addEventListener("click", function () {
+    if (!cur) return;
+    var before = snap(),
+      m = Recipes.byId($("planRecipe").value).method;
+    $("pours").innerHTML = "";
+    cur.rows.forEach(function (x) {
+      addPour([String(x.a), fmtT(x.d), x.note || ""]);
+    });
+    $("dose").value = num("planDose");
+    if (m && !$("method").value) $("method").value = m;
+    $("planBox").open = false;
+    render();
+    toast(
+      "تعبّت الصبّات (" + cur.rows.length + ")، وجاهزة للتايمر",
+      [
+        "تراجع",
+        function () {
+          load(before);
+          render();
+        },
+      ],
+      6000,
+    );
+    try {
+      $("pours").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (e) {}
+  });
+  return { calc: calc };
 })();
 
 // ================= الطواحين والميكرون =================
@@ -805,6 +968,17 @@ var POP = [
   "Wilfa Svart",
 ].map(Micron.find);
 var TAG = { "fiorenzato-pietro": "Pietro" };
+// Forum tag for each brew method. Only methods that have a tag in the server appear here (a Pulsar of any size
+// takes the Pulsar tag, V60 Suiren the V60 tag); Dragonfly and Hario Switch have none yet.
+var METHOD_TAG = {
+  V60: "V60",
+  "V60 Suiren": "V60",
+  Orea: "Orea",
+  Pulsar: "Pulsar",
+  "Pulsar Large": "Pulsar",
+  "Pulsar Mini": "Pulsar",
+  AeroPress: "AeroPress",
+};
 var ND = "ما لقيت رقم ميكرون منشور لها، فما أحوّل عشان ما أخمّن.";
 var EX = {
   "x-c5": {
@@ -1457,6 +1631,7 @@ function render() {
     $(s.id + "_o").hidden = s.value !== "__o";
   });
   if (dialCtrl) dialCtrl.sync();
+  if (varPick) varPick.sync();
   var mu = mic();
   // A photo measurement from grind.html replaces the chart estimate in the post.
   var gm = null;
@@ -1480,11 +1655,7 @@ function render() {
     var v = $(i).value;
     if (v && v !== "__o") {
       var tg = i === "grinder" ? TAG[v] : v;
-      if (
-        i === "method" &&
-        ["V60", "Orea", "Pulsar", "AeroPress"].indexOf(v) < 0
-      )
-        tg = "";
+      if (i === "method") tg = METHOD_TAG[v] || "";
       if (tg) tl.push(tg);
     } else if (v === "__o" && i === "process") tl.push("معالجة-أخرى");
     else if (v === "__o" && i === "origin") tl.push("دولة أخرى");
@@ -1707,12 +1878,22 @@ function render() {
   save();
 }
 document.addEventListener("input", function (e) {
-  if (e.target.id === "pyrCustomIn") return;
+  if (
+    e.target.id === "pyrCustomIn" ||
+    e.target.id === "varQ" ||
+    e.target.id === "varPickSel"
+  )
+    return;
   if (e.target.type === "range") e.target.dataset.touched = "1";
   render();
 });
 document.addEventListener("change", function (e) {
-  if (e.target.id === "pyrCustomIn") return;
+  if (
+    e.target.id === "pyrCustomIn" ||
+    e.target.id === "varQ" ||
+    e.target.id === "varPickSel"
+  )
+    return;
   render();
 });
 
@@ -1830,6 +2011,297 @@ if (navigator.share) {
     navigator.share({ text: t }).catch(function () {});
   };
 }
+
+// ================= السلالة: أكثر من سلالة =================
+// The hidden #variety holds the chosen varieties joined with "، " (an old single value is just a list of one, and an old
+// "other" value is read from #variety_o), so drafts, saved beans and the post line need no other change.
+var VARIETIES = ["74110", "74112", "74148", "74158", "Batian", "Bourbon", "Bourbon Aji", "Catuai", "Caturra", "Castillo", "Chiroso", "Dega", "ETH47", "Field Blend", "Geisha", "Gesha", "Gesha 1931", "Gesha Inca", "Green Tip Gesha", "Heirloom", "Heirloom (إثيوبي محلي)", "Heirloom/Landrace", "Java", "Kurume", "Laurina", "Maragesha", "Mejorado", "Mokka", "Ombligon", "Pacamara", "Parainema", "Pacas", "Pink Bourbon", "Red Bourbon", "Rosado", "Ruiru 11", "Sidra", "SL9", "SL28", "SL34", "Sln9", "Sudan Rume", "Typica", "Villa Sarchi", "Walega", "Wolisho", "Wush Wush", "Yellow Bourbon"];
+var varPick = (function () {
+  var SEP = "، ";
+  var shown = null;
+  function parse(str) {
+    if (str === "__o") str = $("variety_o").value;
+    var seen = {},
+      out = [];
+    String(str || "")
+      .split(/\s*[،,]\s*/)
+      .forEach(function (x) {
+        x = x.trim();
+        if (x && !seen[x.toLowerCase()]) {
+          seen[x.toLowerCase()] = 1;
+          out.push(x);
+        }
+      });
+    return out;
+  }
+  function chosen() {
+    return parse($("variety").value);
+  }
+  function has(list, x) {
+    return list.some(function (y) {
+      return y.toLowerCase() === x.toLowerCase();
+    });
+  }
+  function put(list) {
+    $("variety").value = list.join(SEP);
+    $("variety_o").value = "";
+    draw();
+    render();
+  }
+  function add(x) {
+    x = String(x || "")
+      .replace(/[،,]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+    if (!x) return;
+    var exact = VARIETIES.filter(function (v) {
+      return v.toLowerCase() === x.toLowerCase();
+    })[0];
+    var list = chosen();
+    if (!has(list, exact || x)) list.push(exact || x);
+    $("varQ").value = "";
+    $("varOther").hidden = true;
+    put(list);
+  }
+  // The dropdown lists the varieties not chosen yet; the chosen ones are the pills above it.
+  function drawList() {
+    var list = chosen();
+    $("varPickSel").innerHTML =
+      '<option value="">+ أضف سلالة</option>' +
+      VARIETIES.filter(function (v) {
+        return !has(list, v);
+      })
+        .map(function (v) {
+          return '<option value="' + esc(v) + '">' + esc(v) + "</option>";
+        })
+        .join("") +
+      '<option value="__o">سلالة أخرى…</option>';
+  }
+  function draw() {
+    var list = chosen();
+    shown = $("variety").value;
+    $("varSel").innerHTML = list
+      .map(function (v) {
+        return (
+          '<button type="button" class="vchip on" data-x="' +
+          esc(v) +
+          '" aria-label="شيل ' +
+          esc(v) +
+          '">' +
+          esc(v) +
+          " ✕</button>"
+        );
+      })
+      .join("");
+    drawList();
+  }
+  // Called from render(): redraw when the value changed from outside (draft load, saved coffee, reset).
+  function sync() {
+    if ($("variety").value === "__o")
+      $("variety").value = parse("__o").join(SEP);
+    if ($("variety").value !== shown) draw();
+  }
+  $("varSel").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-x]");
+    if (!b) return;
+    var x = b.getAttribute("data-x");
+    put(
+      chosen().filter(function (y) {
+        return y.toLowerCase() !== x.toLowerCase();
+      }),
+    );
+  });
+  $("varPickSel").addEventListener("change", function () {
+    var v = this.value;
+    this.value = "";
+    if (v === "__o") {
+      $("varOther").hidden = false;
+      $("varQ").focus();
+    } else if (v) add(v);
+  });
+  $("varAdd").addEventListener("click", function () {
+    add($("varQ").value);
+  });
+  $("varQ").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      add($("varQ").value);
+    }
+  });
+  return { sync: sync, add: add, chosen: chosen };
+})();
+
+// ================= المحمصة: بحث في المحامص ومحاصيلك المحفوظة =================
+// One search box: it matches the roaster list (roasters.js, by name, Arabic spelling, country or region word such as
+// "خليجية" or "مصر") and the coffees already saved in the archive (by roaster, coffee or origin). Picking a roaster fills the
+// field and moves on to the coffee; picking a saved coffee fills the whole bean section. Typing a roaster that is not
+// listed still works.
+var roasterPick = (function () {
+  var KW = {
+    sa: "سعودية السعودية saudi ksa",
+    gulf: "خليجية خليجي الخليج gulf",
+    eg: "مصرية مصر egypt",
+    lv: "شامية الشام المغرب اردن لبنان jordan lebanon levant",
+    intl: "اجنبية اجنبي عالمية international",
+  };
+  var GL = {};
+  ROASTER_GROUPS.forEach(function (g) {
+    GL[g[0]] = g[1];
+  });
+  function nz(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[ً-ٟـ]/g, "")
+      .replace(/[أإآ]/g, "ا")
+      .replace(/ة/g, "ه")
+      .replace(/ى/g, "ي")
+      .replace(/[\s\-_.()+&'’%]/g, "");
+  }
+  // Name, Arabic spelling and country match from the first letter; region words ("خليجية", "مصر") only from 3 letters, so
+  // one letter does not match a whole region.
+  var HAY = ROASTERS.map(function (r) {
+    return [r.n, r.a, r.c].map(nz).join("|");
+  });
+  var HAYK = ROASTERS.map(function (r) {
+    return [GL[r.g], KW[r.g]].map(nz).join("|");
+  });
+  function hit(hay, toks, kw) {
+    return toks.every(function (t) {
+      return hay.indexOf(t) > -1 || (kw && t.length >= 3 && kw.indexOf(t) > -1);
+    });
+  }
+  var box = $("roasterSug"),
+    inp = $("roaster"),
+    cur = -1,
+    hideT = 0;
+  function items() {
+    return box.querySelectorAll(".sug-i");
+  }
+  function hide() {
+    box.hidden = true;
+    inp.setAttribute("aria-expanded", "false");
+    cur = -1;
+  }
+  function draw() {
+    var q = inp.value.trim(),
+      toks = q.split(/\s+/).map(nz).filter(Boolean),
+      h = "",
+      n = 0;
+    var saved = beans
+      .filter(function (b) {
+        return (
+          toks.length &&
+          hit([b.f.roaster, b.f.coffee, b.f.origin].map(nz).join("|"), toks)
+        );
+      })
+      .slice(0, 6);
+    if (saved.length) {
+      h += '<div class="sug-h">محاصيلك المحفوظة</div>';
+      saved.forEach(function (b) {
+        h +=
+          '<button type="button" class="sug-i" data-b="' +
+          esc(b.id) +
+          '"><b>' +
+          esc(b.f.coffee || "") +
+          "</b><span>" +
+          esc(b.f.roaster || "") +
+          "</span></button>";
+      });
+    }
+    ROASTER_GROUPS.forEach(function (g) {
+      var rows = [];
+      ROASTERS.forEach(function (r, i) {
+        if (r.g === g[0] && (!toks.length || hit(HAY[i], toks, HAYK[i])))
+          rows.push(r);
+      });
+      if (toks.length)
+        rows.sort(function (a, b) {
+          return (
+            (nz(a.n).indexOf(toks[0]) === 0 ? 0 : 1) -
+            (nz(b.n).indexOf(toks[0]) === 0 ? 0 : 1)
+          );
+        });
+      // Empty search: every Saudi roaster first, then a few from each other group so each one is visible; with a search, as
+      // many as fit (Saudi first there too, since the groups keep this order).
+      rows = toks.length ? rows.slice(0, Math.max(0, 40 - n)) : g[0] === "sa" ? rows : rows.slice(0, 5);
+      if (!rows.length) return;
+      n += rows.length;
+      h += '<div class="sug-h">' + esc(g[1]) + "</div>";
+      rows.forEach(function (r) {
+        h +=
+          '<button type="button" class="sug-i" data-r="' +
+          esc(r.n) +
+          '"><b>' +
+          esc(r.n) +
+          "</b><span>" +
+          esc(r.a || r.c || "") +
+          "</span></button>";
+      });
+    });
+    if (h && !toks.length)
+      h +=
+        '<div class="sug-f">اكتب اسم المحمصة، أو كلمة مثل: سعودية، خليجية، مصرية، أجنبية</div>';
+    // Exactly what is typed already: nothing left to suggest.
+    var only = ROASTERS.filter(function (r) {
+      return r.n.toLowerCase() === q.toLowerCase();
+    });
+    if (!h || (only.length && !saved.length && n === 1)) return hide();
+    box.innerHTML = h;
+    box.hidden = false;
+    inp.setAttribute("aria-expanded", "true");
+    cur = -1;
+  }
+  function pick(el) {
+    if (!el) return;
+    clearTimeout(hideT);
+    if (el.dataset.r != null) {
+      inp.value = el.dataset.r;
+      hide();
+      render();
+      $("coffee").focus();
+    } else if (el.dataset.b != null) {
+      hide();
+      inp.blur();
+      applyBean(el.dataset.b);
+    }
+  }
+  function move(d) {
+    var a = items();
+    if (!a.length) return;
+    if (cur > -1) a[cur].classList.remove("on");
+    cur = (cur + d + a.length) % a.length;
+    a[cur].classList.add("on");
+    a[cur].scrollIntoView({ block: "nearest" });
+  }
+  inp.addEventListener("focus", draw);
+  inp.addEventListener("input", draw);
+  inp.addEventListener("blur", function () {
+    hideT = setTimeout(hide, 150);
+  });
+  inp.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") hide();
+    else if (e.key === "ArrowDown") {
+      if (box.hidden) draw();
+      move(1);
+      e.preventDefault();
+    } else if (e.key === "ArrowUp") {
+      move(-1);
+      e.preventDefault();
+    } else if (e.key === "Enter" && cur > -1 && !box.hidden) {
+      e.preventDefault();
+      pick(items()[cur]);
+    }
+  });
+  // mousedown would take the focus away from the field before the click lands
+  box.addEventListener("mousedown", function (e) {
+    e.preventDefault();
+  });
+  box.addEventListener("click", function (e) {
+    pick(e.target.closest(".sug-i"));
+  });
+  return { draw: draw, hide: hide };
+})();
 
 // ================= أرشيف المحاصيل والتحضيرة السابقة =================
 var BEANS_KEY = "brewlog-beans-v1";
@@ -2246,6 +2718,88 @@ $("beanFold").onclick = function () {
 $("beanDel").onclick = delBean;
 $("lastCopy").onclick = applyLast;
 
+// ================= النشر في ديسكورد (مخفي حتى يُفعَّل في discord-config.js) =================
+// Sends the post text (never a photo) to the site's own api/discord.js, which holds the webhook. A link to the coffee's forum post
+// makes it a reply in that post; without one it opens a new forum post with the title and tags. The link is remembered per coffee.
+(function () {
+  if (typeof DISCORD_ENABLED === "undefined" || !DISCORD_ENABLED || !DISCORD_ENDPOINT) return;
+  var DC_KEY = "brewlog-threads-v1";
+  function threads() {
+    try {
+      return JSON.parse(localStorage.getItem(DC_KEY) || "{}") || {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function remember(k, u) {
+    if (!k) return;
+    var t = threads();
+    if (u) t[k] = u;
+    else delete t[k];
+    try {
+      localStorage.setItem(DC_KEY, JSON.stringify(t));
+    } catch (e) {}
+  }
+  function tagNames() {
+    return [].slice.call(document.querySelectorAll("#tags .tg")).map(function (x) {
+      return x.textContent.trim();
+    });
+  }
+  function close() {
+    $("dcModal").hidden = true;
+  }
+  function open() {
+    if (!val("roaster") || !val("coffee")) {
+      toast("عبّ المحمصة والمحصول أول");
+      return;
+    }
+    var tg = tagNames();
+    $("dcPrev").innerHTML =
+      "<b>" + esc($("title").textContent) + "</b>" + (tg.length ? '<div class="hint">' + tg.map(esc).join(" · ") + "</div>" : "");
+    $("dcThread").value = threads()[curKey()] || "";
+    $("dcHint").textContent = "";
+    $("dcSend").disabled = false;
+    $("dcModal").hidden = false;
+  }
+  function submit() {
+    var link = $("dcThread").value.trim();
+    $("dcSend").disabled = true;
+    $("dcHint").textContent = "جاري الإرسال…";
+    fetch(DISCORD_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: $("title").textContent.trim(), body: $("out").value, tags: tagNames(), threadUrl: link }),
+    })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          return { ok: r.ok && j.ok, j: j };
+        });
+      })
+      .then(function (x) {
+        if (!x.ok) throw new Error((x.j && x.j.error) || "ما انرسل");
+        // A new post's link is kept so the next brew of this coffee can reply in it.
+        if (!link && x.j.url) remember(curKey(), x.j.url);
+        else if (link) remember(curKey(), link);
+        close();
+        toast(link ? "انرسل كرد في المنشور ✓" : "انرسل كمنشور جديد ✓", x.j.url ? ["افتح", function () { window.open(x.j.url, "_blank", "noopener"); }] : null, 7000);
+      })
+      .catch(function (e) {
+        $("dcSend").disabled = false;
+        $("dcHint").textContent = e && e.message ? e.message : "ما انرسل، جرّب مرة ثانية";
+      });
+  }
+  $("dcOpen").hidden = false;
+  $("dcOpen").addEventListener("click", open);
+  $("dcCancel").addEventListener("click", close);
+  $("dcSend").addEventListener("click", submit);
+  $("dcModal").addEventListener("click", function (e) {
+    if (e.target === $("dcModal")) close();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !$("dcModal").hidden) close();
+  });
+})();
+
 // ================= معاينة البوست كنافذة من تحت (الجوال) =================
 function openSheet() {
   $("sidePanel").classList.add("open");
@@ -2310,7 +2864,13 @@ function snap() {
   document
     .querySelectorAll("main input[id],main select[id],main textarea[id]")
     .forEach(function (e) {
-      if (e.id !== "gq" && e.id !== "pyrCustomIn" && e.type !== "range")
+      if (
+        e.id !== "gq" &&
+        e.id !== "varQ" &&
+        e.id !== "varPickSel" &&
+        e.id !== "pyrCustomIn" &&
+        e.type !== "range"
+      )
         v[e.id] = e.type === "checkbox" ? e.checked : e.value;
     });
   var r = {};
@@ -2392,6 +2952,8 @@ function clearForm() {
   });
   $("addmic").checked = true;
   $("gmeas").value = "";
+  $("variety").value = "";
+  $("variety_o").value = "";
   scores.forEach(function (s) {
     $(s[1]).value = 5;
     $(s[1]).dataset.touched = "0";

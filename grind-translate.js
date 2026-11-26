@@ -199,7 +199,24 @@
     return {labels:s.labels,uniq:n.map(function(x,i){return first[x]===i}),lo:s.lo,hi:s.hi,um:function(i){return Math.round(s.lo+(s.hi-s.lo)*i/last)}};
   }
 
-  var api={dial:dial,MIN_SETTINGS:MIN_SETTINGS,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
+  // A typed micron number turned into a setting on one grinder's chart scale: the nearest setting, the next finer and next
+  // coarser one, and whether the number is outside what the dial covers. dial: dial(Micron,key).
+  function atMicron(dial,u){
+    var pos=[],i;
+    for(i=0;i<dial.labels.length;i++)if(dial.uniq[i])pos.push({idx:i,setting:dial.labels[i],um:dial.um(i)});
+    if(!pos.length||!(u>0))return null;
+    pos.sort(function(a,b){return a.um-b.um||a.idx-b.idx});
+    var bi=0,bd=Infinity;
+    pos.forEach(function(q,j){var d=Math.abs(q.um-u);if(d<bd){bd=d;bi=j}});
+    var best=pos[bi],finer=null,coarser=null;
+    for(i=bi-1;i>=0;i--)if(pos[i].um<best.um){finer=pos[i];break}
+    for(i=bi+1;i<pos.length;i++)if(pos[i].um>best.um){coarser=pos[i];break}
+    var lo=pos[0].um,hi=pos[pos.length-1].um;
+    return {um:u,idx:best.idx,setting:best.setting,chart:best.um,diff:best.um-u,finer:finer,coarser:coarser,lo:lo,hi:hi,
+      outside:u<lo*0.97||u>hi*1.03};
+  }
+
+  var api={dial:dial,atMicron:atMicron,MIN_SETTINGS:MIN_SETTINGS,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
     contribution:contribution,extrapolate:extrapolate,regress:regress,reference:reference,wear:wear,busiest:busiest,latestPair:latestPair};
   if(typeof module==="object"&&module.exports)module.exports=api;else root.GrindTranslate=api;
 })(typeof self!=="undefined"?self:this);

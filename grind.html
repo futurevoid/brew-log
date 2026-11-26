@@ -14,7 +14,7 @@
 <div class="top"><div><h1>محوّل الطحنة</h1><p class="sub" style="margin:0">قياس حجم حبيبات البن من صورة. الصورة ما تطلع من جوالك.</p></div><div class="tb"><button type="button" class="btn" id="theme" aria-label="تبديل الوضع الداكن والفاتح"></button></div></div>
 
 <nav class="seg" id="tabs" aria-label="أقسام الصفحة">
-<button type="button" data-v="an" aria-pressed="true">تحليل</button><button type="button" data-v="tr">ترجمة</button><button type="button" data-v="cmp">مقارنة</button><button type="button" data-v="hist">السجل</button>
+<button type="button" data-v="an" aria-pressed="true">تحليل</button><button type="button" data-v="um">ميكرون</button><button type="button" data-v="tr">ترجمة</button><button type="button" data-v="cmp">مقارنة</button><button type="button" data-v="hist">السجل</button>
 </nav>
 
 <!-- Analyze -->
@@ -66,6 +66,17 @@
 <div class="row"><button type="button" class="btn p" id="useBrew" style="flex:1">استخدم في وصفتي</button></div>
 <div class="row"><button type="button" class="btn" id="goTr">ترجم لطواحين</button><button type="button" class="btn" id="goCmp">قارن</button><button type="button" class="btn" id="newSample">قياس جديد</button></div>
 </div>
+</section>
+
+<!-- Type a micron number -->
+<section id="v-um" hidden>
+<div class="card hero">
+<h2>من ميكرون إلى إعداد</h2>
+<p class="hint" style="margin:0 0 10px">عندك رقم ميكرون؟ اكتبه واختر طاحونتك، ويطلع لك الإعداد الأقرب على سلّم جدول الطاحونة. بدون صورة.</p>
+<label>الميكرون<input type="number" id="umIn" inputmode="decimal" min="20" max="3000" step="any" placeholder="مثل 650" autocomplete="off"></label>
+<label style="margin-top:10px">الطاحونة<input type="search" id="umQ" placeholder="🔍 ابحث عن طاحونتك" autocomplete="off"><select id="umG"></select></label>
+</div>
+<div id="umOut"></div>
 </section>
 
 <!-- Translate -->

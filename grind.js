@@ -39,9 +39,9 @@ themeLabel();
 // ---------- tabs ----------
 var view="an";
 function show(v){
-  view=v;["an","tr","cmp","hist"].forEach(function(x){$("v-"+x).hidden=x!==v});
+  view=v;["an","um","tr","cmp","hist"].forEach(function(x){$("v-"+x).hidden=x!==v});
   [].forEach.call($("tabs").children,function(b){b.setAttribute("aria-pressed",b.dataset.v===v?"true":"false")});
-  if(v==="an")renderHome();if(v==="tr")renderTr();if(v==="cmp")renderCmp();if(v==="hist")renderHist();
+  if(v==="an")renderHome();if(v==="um")renderUm();if(v==="tr")renderTr();if(v==="cmp")renderCmp();if(v==="hist")renderHist();
   window.scrollTo(0,0);
 }
 $("tabs").addEventListener("click",function(e){var b=e.target.closest("button");if(b)show(b.dataset.v)});
@@ -339,6 +339,46 @@ function useInBrew(s){
   lsSet(DRAFT,d);location.href="index.html";
 }
 $("goTr").onclick=function(){show("tr")};$("goCmp").onclick=function(){cmpMode="tr";show("cmp")};
+
+// ---------- type a micron number ----------
+// A number typed by hand is read on the chart scale (the scale the grinder charts and this page's headline use), so the answer
+// is the setting whose chart micron is nearest. No photo and no calibration are involved.
+var UMKEY="grind-last-um";
+var LASTG="grind-last-grinder";
+function umBox(k,r){
+  var d=r.diff,df=Math.abs(d)<0.5?"نفس الرقم":"فرق "+n0(Math.abs(d))+" µm "+(d>0?"أخشن":"أنعم")+" من رقمك";
+  function nb(t,q){return'<div><span>'+t+'</span><b dir="ltr">'+(q?esc(q.setting):"—")+'</b><span dir="ltr">'+(q?"≈ "+n0(q.um)+" µm":"آخر الجدول")+'</span></div>'}
+  var c=Micron.calc(k,r.setting),meth=!c.e&&c.methods&&c.methods.length?'<div class="hint">تصلح لـ '+esc(c.methods.slice(0,3).join("، "))+'</div>':"";
+  var out=r.outside?'<div class="note off">رقمك خارج مدى '+esc(gname(k))+' ('+n0(r.lo)+' إلى '+n0(r.hi)+' µm). هذا أقرب إعداد فيها.</div>':"";
+  return'<div class="card umres"><div class="d50row"><span class="hint" style="margin:0">الإعداد على '+esc(gname(k))+'</span><b class="big" dir="ltr">'+esc(r.setting)+'</b></div>'+
+    '<div class="hint">≈ '+n0(r.chart)+' µm على سلّم جدول الطاحونة · '+df+'</div>'+
+    '<div class="g2 umnb">'+nb("الأنعم بخطوة",r.finer)+nb("الأخشن بخطوة",r.coarser)+'</div>'+meth+out+
+    '<button type="button" class="btn p" id="umUse" style="margin-top:10px;width:100%" data-k="'+k+'" data-s="'+esc(r.setting)+'">استخدم في وصفتي</button></div>';
+}
+function renderUm(){
+  var el=$("umOut"),raw=$("umIn").value.trim(),u=parseFloat(raw),k=$("umG").value;
+  if(!raw){el.innerHTML="";return}
+  if(!(u>=20&&u<=3000)){el.innerHTML='<div class="note off">اكتب رقم بين 20 و 3000 ميكرون.</div>';return}
+  if(!k){el.innerHTML='<div class="note off">اختر الطاحونة.</div>';return}
+  lsSet(UMKEY,raw);lsSet(LASTG,k);
+  var r=GrindTranslate.atMicron(GrindTranslate.dial(Micron,k),u);
+  if(!r){el.innerHTML="";return}
+  var more=targets.filter(function(x){return x!==k}).map(function(x){
+    var q=GrindTranslate.atMicron(GrindTranslate.dial(Micron,x),u);
+    return q?'<div class="trrow"><div><b>'+esc(gname(x))+'</b><span dir="ltr">≈ '+n0(q.chart)+' µm'+(q.outside?" · خارج المدى":"")+'</span></div><div class="trset"><span>الإعداد</span><b dir="ltr">'+esc(q.setting)+'</b></div></div>':"";
+  }).join("");
+  el.innerHTML=umBox(k,r)+(more?'<h2 style="margin:12px 0 6px;font-size:16px">نفس الرقم على طواحينك الثانية</h2><div id="umMore" style="display:flex;flex-direction:column;gap:8px">'+more+'</div>':"");
+}
+$("umIn").oninput=renderUm;
+$("umQ").oninput=function(){fillGrinders($("umG"),this.value,null);renderUm()};
+$("umG").onchange=renderUm;
+$("umOut").addEventListener("click",function(e){
+  var b=e.target.closest("#umUse");if(!b)return;
+  var d=lsGet(DRAFT,{v:{}});d.v=d.v||{};
+  d.v.grinder=b.dataset.k;d.v.grind=b.dataset.s;d.v.gmeas="";
+  lsSet(DRAFT,d);location.href="index.html";
+});
+fillGrinders($("umG"),"",lsGet(LASTG,""));$("umIn").value=lsGet(UMKEY,"");
 
 // ---------- translate ----------
 var selId=(latest()||{}).id||null;

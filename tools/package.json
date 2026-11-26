@@ -3,7 +3,7 @@
   "private": true,
   "description": "Test helpers for the brew log site. The site itself needs no build step.",
   "scripts": {
-    "test": "node test_micron.js && node test_translate.js && node test_grind.js"
+    "test": "node test_micron.js && node test_recipes.js && node test_discord.js && node test_translate.js && node test_grind.js"
   },
   "devDependencies": {
     "@techstark/opencv-js": "4.10.0-release.1"

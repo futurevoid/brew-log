@@ -8,13 +8,13 @@ var M=ctx.M,T=ctx.T,fails=0;
 function check(name,ok,info){console.log((ok?"PASS ":"FAIL ")+name+(info?"  "+info:""));if(!ok)fails++}
 
 var C40=M.find("Comandante C40 MK4"),KU=M.find("1Zpresso K-Ultra"),ESP=M.find("Baratza Encore ESP");
-var dC40=M.dial(C40),dKU=M.dial(KU),dESP=M.dial(ESP);
+var dC40=T.dial(M,C40),dKU=T.dial(M,KU),dESP=T.dial(M,ESP);
 // Made-up "true" grinders: D50 grows smoothly with the setting (slightly curved, like real burrs).
 function trueC40(i){return 40+29*i-0.12*i*i}
 function trueKU(i){return 60+6.6*i+0.004*i*i}
 function hist(d50){var h=[];for(var k=0;k<16;k++){var x=100*Math.pow(20,(k+0.5)/16);h.push(Math.exp(-Math.pow(Math.log(x/d50),2)/0.2))}var s=h.reduce(function(a,b){return a+b},0);return h.map(function(v){return v/s})}
 var id=0;
-function sample(key,i,d50,t){return {id:"s"+(++id),t:t||id,grinder:key,idx:i,setting:key?M.dial(key).labels[i]:null,calib:true,d50:d50,hist:hist(d50),under:0,over:0,fines:{100:0.02,150:0.05,200:0.1}}}
+function sample(key,i,d50,t){return {id:"s"+(++id),t:t||id,grinder:key,idx:i,setting:key?T.dial(M,key).labels[i]:null,calib:true,d50:d50,hist:hist(d50),under:0,over:0,fines:{100:0.02,150:0.05,200:0.1}}}
 
 var S=[];
 [10,16,22,28,34].forEach(function(i){S.push(sample(C40,i,trueC40(i)))});
@@ -55,7 +55,7 @@ for(var s=12;s<=33;s++){
 check("round trip C40 -> K-Ultra -> C40 within one step",tried>=10&&worst<=1,"worst "+worst+" over "+tried+" settings, "+flagged+" flagged outside");
 
 // Grinder without calibration.
-var TC3=M.find("Timemore C3"),dTC3=M.dial(TC3);
+var TC3=M.find("Timemore C3"),dTC3=T.dial(M,TC3);
 var blocked=T.translate(photo,TC3,dTC3,S,{allowEst:false});
 check("uncalibrated + measured-only is blocked",blocked.blocked&&blocked.need===4);
 var est=T.translate(photo,TC3,dTC3,S,{allowEst:true});
@@ -88,7 +88,7 @@ check("latest vs previous at same setting",lp&&lp[0].t===400&&lp[1].t===200);
 
 
 // Real measurements: five 1Zpresso Q Air photos at 1.5.0, 2.0.0, 2.3.2, 3.0.0, 3.5.0 (chart 510..1190 um).
-var QA=M.find("1Zpresso Q Air"),dQA=M.dial(QA),qS=[];
+var QA=M.find("1Zpresso Q Air"),dQA=T.dial(M,QA),qS=[];
 [["1.5.0",751],["2.0.0",951],["2.3.2",1074],["3.0.0",1369],["3.5.0",1529]].forEach(function(p){var r=M.calc(QA,p[0]);qS.push(sample(QA,Math.round(r.i),p[1]))});
 var rg=T.regress(qS,QA,dQA);
 check("Q Air regression ready",!!rg&&rg.n===5,rg?"leave-one-out ±"+rg.acc.toFixed(1)+"%":"");
@@ -109,5 +109,21 @@ for(var q=0;q<dC40.labels.length;q++){if(!dC40.uniq[q])continue;var dq=Math.abs(
 check("built-in works for other grinders: C40 setting is the one whose chart micron matches",tc.idx===best&&tc.ref===true&&!tc.outside,tc.setting+" ≈ "+Math.round(dC40.um(tc.idx))+" µm for "+Math.round(um2)+" µm");
 var raw=T.translate(mid,C40,dC40,[],{allowEst:true});
 check("without the conversion the raw photo D50 would pick a coarser C40 setting",raw.idx>tc.idx,raw.setting+" vs "+tc.setting);
+
+// Typing a micron number by hand: nearest setting on the chosen grinder's chart scale.
+var qa=T.atMicron(dQA,1187);
+check("typed 1187 µm on the Q Air is 3.5.0 (chart 1190)",qa&&qa.setting==="3.5.0"&&qa.chart===1190&&!qa.outside,qa&&qa.setting+" "+qa.chart);
+var exact=T.atMicron(dQA,dQA.um(40));
+check("a number that is exactly a setting's chart micron gives that setting with no difference",exact&&exact.diff===0&&exact.idx===(function(){for(var i=0;i<dQA.labels.length;i++)if(dQA.uniq[i]&&dQA.um(i)===dQA.um(40))return i})(),exact&&exact.setting);
+var c650=T.atMicron(dC40,650);
+check("C40 650 µm: nearest setting is within half a step and the finer/coarser ones bracket it",c650&&c650.finer&&c650.coarser&&c650.finer.um<c650.chart&&c650.chart<c650.coarser.um&&Math.abs(c650.diff)<=Math.max(c650.chart-c650.finer.um,c650.coarser.um-c650.chart)/2+1e-9&&!c650.outside,c650&&c650.setting+" ≈ "+c650.chart);
+var hi=T.atMicron(dC40,5000),dHigh=null;
+M.list.forEach(function(g){var d=T.dial(M,g.key);if(!dHigh&&Math.min(d.um(0),d.um(d.labels.length-1))>150)dHigh=d});
+var lo2=T.atMicron(dHigh,Math.min(dHigh.um(0),dHigh.um(dHigh.labels.length-1))*0.5);
+check("a number past the coarse end is flagged outside, with the coarsest setting and nothing coarser",hi&&hi.outside&&hi.coarser===null&&hi.chart===hi.hi);
+check("a number past the fine end is flagged outside, with the finest setting and nothing finer",lo2&&lo2.outside&&lo2.finer===null&&lo2.chart===lo2.lo);
+check("0, negative and junk give nothing",T.atMicron(dC40,0)===null&&T.atMicron(dC40,-5)===null&&T.atMicron(dC40,NaN)===null);
+var allOk=true,nG=0;M.list.forEach(function(g){var d=T.dial(M,g.key);if(!d)return;nG++;var mid=(d.um(0)+d.um(d.labels.length-1))/2,r=T.atMicron(d,mid);if(!r||typeof r.setting!=="string"||!r.setting||Math.abs(r.diff)>Math.abs(d.um(d.labels.length-1)-d.um(0))/2+1)allOk=false});
+check("every grinder in the list answers a mid-range number with a setting",allOk&&nG===M.list.length,nG+" grinders");
 console.log(fails?fails+" failed":"all passed");
 process.exit(fails?1:0);

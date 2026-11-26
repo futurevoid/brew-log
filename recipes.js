@@ -1,7 +1,7 @@
-// Pour plans for the brew log: a ready recipe (or your own numbers) turned into pours for a given dose. Pure functions, no page
-// access, so tools/test_recipes.js can check them. Each pour is {a: ml poured in this step, d: seconds from the start of this
-// pour to the start of the next one (the last one runs to the end of the brew), note}. That is the same meaning the pour
-// table already uses for its amount and time columns.
+// Pour helpers for the brew log. The user types the pours; these only supply the ready recipes (4:6 and Hoffmann) scaled to a dose,
+// and an equal split of the water that is left. Pure functions, no page access, so tools/test_recipes.js can check them. Each
+// pour is {a: ml poured in this step, d: seconds from the start of this pour to the start of the next one (the last one runs to
+// the end of the brew), note}. That is the same meaning the pour table already uses for its amount and time columns.
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.Recipes = factory();
@@ -39,15 +39,6 @@
       method: "V60",
       src: "مبنية على طريقة جيمس هوفمان: 30 غ و500 غ ماء، تفتيح بضعف وزن البن لمدة 45 ثانية مع تدويخ، ثم صبّ إلى 60% من الماء، ثم إلى الكمية كاملة، وتحريك خفيف وتدويخ. الأوقات تقريبية والمجموع حوالي 3:30.",
     },
-    {
-      id: "custom",
-      name: "حسب رغبتي",
-      dose: 15,
-      ratio: 16,
-      temp: null,
-      method: "",
-      src: "حساب بأرقامك: تفتيح، ثم الماء الباقي على صبّات متساوية.",
-    },
   ];
 
   function byId(id) {
@@ -56,8 +47,7 @@
     })[0];
   }
 
-  // opts: {dose, ratio} for every recipe; custom also takes bloomX, bloomSec, pours, gap, totalSec (optional end time).
-  // Returns {rows, water, total, temp, method} or null when the numbers do not make sense.
+  // opts: {dose, ratio}. Returns {rows, water, total, temp, method} or null when the numbers do not make sense.
   function plan(id, opts) {
     var r = byId(id),
       dose = +opts.dose,
@@ -82,35 +72,6 @@
         "صبّ مستمر",
         "صبّ إلى الكمية كاملة، ثم تحريك خفيف بالملعقة وتدويخ",
       ];
-    } else {
-      var n = Math.round(+opts.pours),
-        bx = +opts.bloomX,
-        bs = Math.round(+opts.bloomSec),
-        gap = Math.round(+opts.gap);
-      if (!(n >= 1 && n <= 8) || !(bx >= 0 && bx <= 4) || !(bs >= 0 && bs <= 180) || !(gap >= 5 && gap <= 180))
-        return null;
-      var b = Math.round(dose * bx);
-      if (b >= water) return null;
-      var cum = [],
-        i;
-      if (b > 0) cum.push(b / water);
-      for (i = 1; i <= n; i++) cum.push((b + ((water - b) * i) / n) / water);
-      a = steps(water, cum);
-      d = [];
-      note = [];
-      if (b > 0) {
-        d.push(bs);
-        note.push("تفتيح");
-      }
-      for (i = 0; i < n; i++) {
-        d.push(gap);
-        note.push("");
-      }
-      var end = Math.round(+opts.totalSec) || 0,
-        used = d.reduce(function (x, y) {
-          return x + y;
-        }, 0);
-      if (end > used) d[d.length - 1] += end - used;
     }
     var rows = a.map(function (ml, i) {
       return { a: ml, d: d[i], note: note[i] };
@@ -126,5 +87,17 @@
     };
   }
 
-  return { LIST: LIST, byId: byId, plan: plan };
+  // `total` ml shared as equally as whole millilitres allow over n pours (the extra millilitres go to the first ones).
+  function equal(total, n) {
+    total = Math.round(+total);
+    n = Math.round(+n);
+    if (!(total > 0) || !(n >= 1 && n <= 20)) return null;
+    var out = [],
+      base = Math.floor(total / n),
+      extra = total - base * n;
+    for (var i = 0; i < n; i++) out.push(base + (i < extra ? 1 : 0));
+    return out;
+  }
+
+  return { LIST: LIST, byId: byId, plan: plan, equal: equal };
 });

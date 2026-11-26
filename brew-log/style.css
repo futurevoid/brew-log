@@ -1397,8 +1397,13 @@ details.hint summary {
 /* ================= Mobile Smart Accordion & Progress Bar (<= 860px) ================= */
 @media (max-width: 860px) {
   .wrap {
-    grid-template-columns: 1fr;
+    /* minmax(0, ...) so the column can be narrower than its widest row (step pills, saved-coffee chips scroll sideways on
+       their own); a plain 1fr grows to fit them and pushes the whole page wider than the phone. */
+    grid-template-columns: minmax(0, 1fr);
     padding-top: 14px;
+  }
+  .wrap > main {
+    min-width: 0;
   }
 
   /* Sticky Top Step Pills */
@@ -2222,7 +2227,7 @@ details.hint summary {
   margin-top: 4px;
 }
 
-/* Plan the pours from a recipe */
+/* Calculate along with the pours the user types */
 .plan {
   background: var(--surface);
   border: 1px solid var(--bd);
@@ -2244,35 +2249,53 @@ details.hint summary {
   gap: 10px;
   padding: 2px 0 12px;
 }
-.plan-g {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.plan-sub {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 4px;
 }
-.plan-g[hidden] {
-  display: none;
+.plan-row2 {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
 }
-.plan-out {
+.plan-row2 > select,
+.plan-row2 > label {
+  flex: 1;
+  min-width: 0;
+}
+.plan-row2 > .btn {
+  min-height: 44px;
+  flex: none;
+}
+.plan-calc {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-.plan-row {
-  display: grid;
-  grid-template-columns: 44px 62px 78px 1fr;
-  align-items: center;
-  gap: 8px;
   background: var(--card);
   border: 1px solid var(--bd);
   border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 0.86rem;
+  padding: 8px 10px;
+  font-size: 0.88rem;
 }
-.plan-row .c,
-.plan-row i {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-style: normal;
+.plan-calc b {
+  font-weight: 700;
+}
+.plan-calc .hint {
+  margin: 0;
+}
+.plan-calc .left {
+  color: var(--acc);
+  font-weight: 700;
+}
+.plan-calc .over {
+  color: var(--danger);
+  font-weight: 700;
+}
+.plan-calc .done {
+  color: var(--ok);
+  font-weight: 700;
 }
 .timer-guide {
   font-size: 1rem;

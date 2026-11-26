@@ -109,5 +109,21 @@ for(var q=0;q<dC40.labels.length;q++){if(!dC40.uniq[q])continue;var dq=Math.abs(
 check("built-in works for other grinders: C40 setting is the one whose chart micron matches",tc.idx===best&&tc.ref===true&&!tc.outside,tc.setting+" ≈ "+Math.round(dC40.um(tc.idx))+" µm for "+Math.round(um2)+" µm");
 var raw=T.translate(mid,C40,dC40,[],{allowEst:true});
 check("without the conversion the raw photo D50 would pick a coarser C40 setting",raw.idx>tc.idx,raw.setting+" vs "+tc.setting);
+
+// Typing a micron number by hand: nearest setting on the chosen grinder's chart scale.
+var qa=T.atMicron(dQA,1187);
+check("typed 1187 µm on the Q Air is 3.5.0 (chart 1190)",qa&&qa.setting==="3.5.0"&&qa.chart===1190&&!qa.outside,qa&&qa.setting+" "+qa.chart);
+var exact=T.atMicron(dQA,dQA.um(40));
+check("a number that is exactly a setting's chart micron gives that setting with no difference",exact&&exact.diff===0&&exact.idx===(function(){for(var i=0;i<dQA.labels.length;i++)if(dQA.uniq[i]&&dQA.um(i)===dQA.um(40))return i})(),exact&&exact.setting);
+var c650=T.atMicron(dC40,650);
+check("C40 650 µm: nearest setting is within half a step and the finer/coarser ones bracket it",c650&&c650.finer&&c650.coarser&&c650.finer.um<c650.chart&&c650.chart<c650.coarser.um&&Math.abs(c650.diff)<=Math.max(c650.chart-c650.finer.um,c650.coarser.um-c650.chart)/2+1e-9&&!c650.outside,c650&&c650.setting+" ≈ "+c650.chart);
+var hi=T.atMicron(dC40,5000),dHigh=null;
+M.list.forEach(function(g){var d=T.dial(M,g.key);if(!dHigh&&Math.min(d.um(0),d.um(d.labels.length-1))>150)dHigh=d});
+var lo2=T.atMicron(dHigh,Math.min(dHigh.um(0),dHigh.um(dHigh.labels.length-1))*0.5);
+check("a number past the coarse end is flagged outside, with the coarsest setting and nothing coarser",hi&&hi.outside&&hi.coarser===null&&hi.chart===hi.hi);
+check("a number past the fine end is flagged outside, with the finest setting and nothing finer",lo2&&lo2.outside&&lo2.finer===null&&lo2.chart===lo2.lo);
+check("0, negative and junk give nothing",T.atMicron(dC40,0)===null&&T.atMicron(dC40,-5)===null&&T.atMicron(dC40,NaN)===null);
+var allOk=true,nG=0;M.list.forEach(function(g){var d=T.dial(M,g.key);if(!d)return;nG++;var mid=(d.um(0)+d.um(d.labels.length-1))/2,r=T.atMicron(d,mid);if(!r||typeof r.setting!=="string"||!r.setting||Math.abs(r.diff)>Math.abs(d.um(d.labels.length-1)-d.um(0))/2+1)allOk=false});
+check("every grinder in the list answers a mid-range number with a setting",allOk&&nG===M.list.length,nG+" grinders");
 console.log(fails?fails+" failed":"all passed");
 process.exit(fails?1:0);

@@ -93,7 +93,7 @@ var img=null,cur=null,photoIdx=0,res=null,mode=null,fix=null,crop=null,addingSpr
 var MAXSIDE=4032;
 var ENGINE=2; // measuring method of the saved numbers (2 = five runs per photo, fixed working pixel size)
 // Shown at the bottom of the page, so it is easy to see which version a phone is running.
-var APP_VER="2026-11-24 · built-in calibration · 5 coins · true rejected count";
+var APP_VER="2026-11-26 · merged with the latest brew log · built-in calibration · 5 coins";
 try{$("appVer").textContent="v "+APP_VER+(GrindTranslate.reference?"":" · old files")}catch(e){}
 function status(t){$("status").textContent=t||""}
 function newSession(){cur={id:"g"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),photos:[],sample:null};photoIdx=0}
@@ -174,7 +174,7 @@ function refEq(s,k){
   // ±2%: the worst hold-one-out error of the built-in calibration on the real page.
   var res={k:k||null,um:um,setting:null,acc:Math.max(2,r.acc),outside:false,extrap:s.d50<r.min*0.9||s.d50>r.max*1.1,ref:true};
   if(k){
-    var d=Micron.dial(k),lo=Math.min(d.lo,d.hi),hi=Math.max(d.lo,d.hi),best=-1,bd=Infinity;
+    var d=GrindTranslate.dial(Micron,k),lo=Math.min(d.lo,d.hi),hi=Math.max(d.lo,d.hi),best=-1,bd=Infinity;
     if(um>=lo*0.97&&um<=hi*1.03){for(var i=0;i<d.labels.length;i++){if(!d.uniq[i])continue;var dv=Math.abs(d.um(i)-um);if(dv<bd){bd=dv;best=i}}res.setting=d.labels[best]}
     else res.offDial=true;
   }
@@ -183,7 +183,7 @@ function refEq(s,k){
 function scaleName(k){return k?"على سلّم "+gname(k):"بميكرون الجداول"}
 function ownEq(s,k){
   var c=GrindTranslate.curve(samples,k);if(!c.ready)return null;
-  var d=Micron.dial(k),r=GrindTranslate.regress(samples,k,d);
+  var d=GrindTranslate.dial(Micron,k),r=GrindTranslate.regress(samples,k,d);
   // Preferred: straight-line fit of chart micron vs measured D50 (smooths photo-to-photo noise).
   if(r&&r.acc<=8){
     var lo=r.min*0.7,hi=r.max*1.3;
@@ -220,7 +220,7 @@ function headline(s){
 function readout(s){
   var e=eqInfo(s);
   if(e&&!e.outside&&e.um!=null){
-    var chart=e.k&&s.grinder===e.k&&s.idx!=null?Math.round(Micron.dial(e.k).um(s.idx)):null;
+    var chart=e.k&&s.grinder===e.k&&s.idx!=null?Math.round(GrindTranslate.dial(Micron,e.k).um(s.idx)):null;
     return {cal:true,um:Math.round(e.um),k:e.k,setting:e.setting,chart:chart,ref:!!e.ref};
   }
   return {cal:false,um:Math.round(s.d50)};
@@ -355,7 +355,7 @@ function renderTr(){
   calNote(s);
   var allow=$("allowEst").checked,ru=readout(s);
   $("trRows").innerHTML=targets.length?targets.map(function(k,i){
-    var r=GrindTranslate.translate(s,k,Micron.dial(k),samples,{allowEst:allow,um:ru.cal?ru.um:0}),note,cls;
+    var r=GrindTranslate.translate(s,k,GrindTranslate.dial(Micron,k),samples,{allowEst:allow,um:ru.cal?ru.um:0}),note,cls;
     if(r.blocked){note="تحتاج "+r.need+" إعدادات مقاسة زيادة";cls="est"}
     else if(r.measured){note="مقاسة · "+r.samples+" قياسات"+(r.acc!=null?" · الدقة ±"+r.acc.toFixed(r.acc<1?1:0)+"%":"")+(r.overlap!=null?" · التطابق "+Math.round(r.overlap*100)+"%":"");cls="meas"}
     else{note=r.ref?"معايرة مدمجة + جدول الطاحونة":"تقدير من الجدول";cls="est"}
@@ -397,7 +397,7 @@ function quickSet(){
   s.grinder=k;s.idx=Math.round(r.i);s.setting=r.label;upsert(s);quickInfo(s);headline(s);
 }
 // Example setting from the chosen grinder's own dial, so it is clear what to type.
-function qPh(){var k=$("qG").value;if(!k){$("qSet").placeholder="إعداد طحنتك (اختياري)";return}var d=Micron.dial(k);$("qSet").placeholder="إعداد طحنتك، مثل "+d.labels[Math.floor(d.labels.length*0.6)]}
+function qPh(){var k=$("qG").value;if(!k){$("qSet").placeholder="إعداد طحنتك (اختياري)";return}var d=GrindTranslate.dial(Micron,k);$("qSet").placeholder="إعداد طحنتك، مثل "+d.labels[Math.floor(d.labels.length*0.6)]}
 function quickInfo(s){
   var el=$("qOut");if(!s){el.textContent="";return}
   if(!s.grinder){
@@ -450,7 +450,7 @@ function renderCmp(){
     var s=sel(),meas=targets.filter(function(k){return GrindTranslate.curve(samples,k).ready});
     if(!s||!meas.length){$("cmpPick").innerHTML='<p class="hint" style="margin:0">تحتاج طاحونة مقاسة (4 إعدادات) في قائمة الترجمة.</p>';$("cmpOut").innerHTML="";return}
     cmpT=meas.indexOf(cmpT)>=0?cmpT:meas[0];
-    var r=GrindTranslate.translate(s,cmpT,Micron.dial(cmpT),samples,{}),c=GrindTranslate.curve(samples,cmpT),h=GrindTranslate.histAt(c,r.idx);
+    var r=GrindTranslate.translate(s,cmpT,GrindTranslate.dial(Micron,cmpT),samples,{}),c=GrindTranslate.curve(samples,cmpT),h=GrindTranslate.histAt(c,r.idx);
     A=s;B={hist:h.hist,under:h.under,over:h.over,d50:r.d50,fines:null,d10:null,d90:null};la="الصورة";lb=gname(cmpT)+" · "+r.setting;
     pick='<label>الطاحونة<select id="cT">'+meas.map(function(k){return'<option value="'+k+'"'+(k===cmpT?" selected":"")+'>'+esc(gname(k))+'</option>'}).join("")+'</select></label>';
   }

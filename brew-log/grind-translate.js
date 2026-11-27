@@ -124,13 +124,13 @@
       if(!sxx)return null;var b=sxy/sxx;return {a:my-b*mx,b:b};
     }
     var f=fit(xs,ys);if(!f||!(f.b>0))return null;
-    var e=0;
+    var e=0,w=0;
     for(var k=0;k<xs.length;k++){
       var g=fit(xs.filter(function(_,j){return j!==k}),ys.filter(function(_,j){return j!==k}));
       if(!g)return null;
-      var pr=g.a+g.b*xs[k];e+=Math.pow((pr-ys[k])/ys[k],2);
+      var pr=g.a+g.b*xs[k],q=(pr-ys[k])/ys[k];e+=q*q;w=Math.max(w,Math.abs(q));
     }
-    return {a:f.a,b:f.b,acc:100*Math.sqrt(e/xs.length),min:Math.min.apply(null,xs),max:Math.max.apply(null,xs),n:xs.length,
+    return {a:f.a,b:f.b,acc:100*Math.sqrt(e/xs.length),worst:100*w,min:Math.min.apply(null,xs),max:Math.max.apply(null,xs),n:xs.length,
       um:function(d50){return f.a+f.b*d50}};
   }
 
@@ -185,9 +185,9 @@
     if(refCache)return refCache;
     var xs=REF_POINTS.map(function(p){return p[0]}),ys=REF_POINTS.map(function(p){return p[1]});
     function fit(x,y){var n=x.length,mx=0,my=0,sxy=0,sxx=0,i;for(i=0;i<n;i++){mx+=x[i]/n;my+=y[i]/n}for(i=0;i<n;i++){sxy+=(x[i]-mx)*(y[i]-my);sxx+=(x[i]-mx)*(x[i]-mx)}var b=sxy/sxx;return {a:my-b*mx,b:b}}
-    var f=fit(xs,ys),e=0;
-    for(var k=0;k<xs.length;k++){var g=fit(xs.filter(function(_,j){return j!==k}),ys.filter(function(_,j){return j!==k}));e+=Math.pow((g.a+g.b*xs[k]-ys[k])/ys[k],2)}
-    refCache={a:f.a,b:f.b,acc:100*Math.sqrt(e/xs.length),min:Math.min.apply(null,xs),max:Math.max.apply(null,xs),n:xs.length,
+    var f=fit(xs,ys),e=0,w=0;
+    for(var k=0;k<xs.length;k++){var g=fit(xs.filter(function(_,j){return j!==k}),ys.filter(function(_,j){return j!==k})),q=(g.a+g.b*xs[k]-ys[k])/ys[k];e+=q*q;w=Math.max(w,Math.abs(q))}
+    refCache={a:f.a,b:f.b,acc:100*Math.sqrt(e/xs.length),worst:100*w,min:Math.min.apply(null,xs),max:Math.max.apply(null,xs),n:xs.length,
       um:function(d50){return f.a+f.b*d50}};
     return refCache;
   }
@@ -200,6 +200,15 @@
     var n=s.labels.map(M.norm),first=Object.create(null),last=s.labels.length-1;
     n.forEach(function(x,i){if(!(x in first))first[x]=i});
     return {labels:s.labels,uniq:n.map(function(x,i){return first[x]===i}),lo:s.lo,hi:s.hi,um:function(i){return Math.round(s.lo+(s.hi-s.lo)*i/last)}};
+  }
+
+  // Every setting whose chart micron is within pct % of u: the settings the reading cannot tell apart, given the
+  // calibration's worst hold-one-out error. Returns {lo,hi} labels (finest and coarsest) or null when only one fits.
+  function settingRange(dial,u,pct){
+    var band=u*pct/100,lo=-1,hi=-1,i;
+    for(i=0;i<dial.labels.length;i++){if(!dial.uniq[i])continue;if(Math.abs(dial.um(i)-u)<=band){if(lo<0||dial.um(i)<dial.um(lo))lo=i;if(hi<0||dial.um(i)>dial.um(hi))hi=i}}
+    if(lo<0||lo===hi)return null;
+    return {lo:dial.labels[lo],hi:dial.labels[hi]};
   }
 
   // A typed micron number turned into a setting on one grinder's chart scale: the nearest setting, the next finer and next
@@ -219,7 +228,7 @@
       outside:u<lo*0.97||u>hi*1.03};
   }
 
-  var api={dial:dial,atMicron:atMicron,MIN_SETTINGS:MIN_SETTINGS,ENGINE:ENGINE,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
+  var api={dial:dial,atMicron:atMicron,MIN_SETTINGS:MIN_SETTINGS,ENGINE:ENGINE,settingRange:settingRange,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
     contribution:contribution,extrapolate:extrapolate,regress:regress,reference:reference,wear:wear,busiest:busiest,latestPair:latestPair};
   if(typeof module==="object"&&module.exports)module.exports=api;else root.GrindTranslate=api;
 })(typeof self!=="undefined"?self:this);

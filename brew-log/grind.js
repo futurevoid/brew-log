@@ -114,7 +114,7 @@ var img=null,cur=null,photoIdx=0,res=null,mode=null,fix=null,crop=null,addingSpr
 var MAXSIDE=4032;
 var ENGINE=2; // measuring method of the saved numbers (2 = five runs per photo, fixed working pixel size)
 // Shown at the bottom of the page, so it is easy to see which version a phone is running.
-var APP_VER="2026-11-27 · built-in calibration ±1.3% · old readings left out · 15 coins";
+var APP_VER="2026-11-27 · built-in calibration ±1.3% · setting range · second spread from the gallery · 15 coins";
 try{$("appVer").textContent="v "+APP_VER+(GrindTranslate.reference?"":" · old files")}catch(e){}
 function status(t){$("status").textContent=t||""}
 function newSession(){cur={id:"g"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),photos:[],sample:null};photoIdx=0}
@@ -197,11 +197,14 @@ function refEq(s,k){
   var res={k:k||null,um:um,setting:null,acc:r.acc,outside:false,extrap:s.d50<r.min*0.9||s.d50>r.max*1.1,ref:true};
   if(k){
     var d=GrindTranslate.dial(Micron,k),lo=Math.min(d.lo,d.hi),hi=Math.max(d.lo,d.hi),best=-1,bd=Infinity;
-    if(um>=lo*0.97&&um<=hi*1.03){for(var i=0;i<d.labels.length;i++){if(!d.uniq[i])continue;var dv=Math.abs(d.um(i)-um);if(dv<bd){bd=dv;best=i}}res.setting=d.labels[best]}
+    if(um>=lo*0.97&&um<=hi*1.03){for(var i=0;i<d.labels.length;i++){if(!d.uniq[i])continue;var dv=Math.abs(d.um(i)-um);if(dv<bd){bd=dv;best=i}}res.setting=d.labels[best];res.range=GrindTranslate.settingRange(d,um,spreadPct(r.worst,s))}
     else res.offDial=true;
   }
   return res;
 }
+// How far off a reading can be: the calibration's worst hold-one-out error, smaller with more spreads of the same
+// grind (each spread is an independent handful of grains, so the error shrinks with the square root of their number).
+function spreadPct(worst,s){return worst/Math.sqrt(Math.max(1,s.spreads||1))}
 function scaleName(k){return k?"على سلّم "+gname(k):"بميكرون الجداول"}
 // Your own photo calibration of grinder k is used only when its hold-one-out error beats the built-in calibration.
 function useOwn(k){var d=GrindTranslate.dial(Micron,k),r=d&&GrindTranslate.regress(samples,k,d);return !!(r&&r.acc<=GrindTranslate.reference().acc)}
@@ -214,7 +217,7 @@ function ownEq(s,k){
     if(s.d50<lo||s.d50>hi)return {k:k,um:null,setting:null,acc:r.acc,outside:true};
     var um=Math.max(Math.min(d.lo,d.hi),Math.min(Math.max(d.lo,d.hi),r.um(s.d50))),best=-1,bd=Infinity;
     for(var i=0;i<d.labels.length;i++){if(!d.uniq[i])continue;var dv=Math.abs(d.um(i)-um);if(dv<bd){bd=dv;best=i}}
-    return {k:k,um:um,setting:d.labels[best],acc:r.acc,outside:false,extrap:s.d50<r.min||s.d50>r.max};
+    return {k:k,um:um,setting:d.labels[best],acc:r.acc,outside:false,extrap:s.d50<r.min||s.d50>r.max,range:GrindTranslate.settingRange(d,um,spreadPct(r.worst,s))};
   }
   var t=GrindTranslate.translate(s,k,d,samples,{allowEst:false});
   if(!t||t.blocked||t.idx==null)return null;
@@ -231,7 +234,7 @@ function headline(s){
     $("rD50").textContent="≈ "+n0(e.um)+" µm";
     var pm=e.acc!=null?"\u2066±"+e.acc.toFixed(e.acc<10?1:0)+"%\u2069":"";
     $("rD50L").textContent=scaleName(e.k)+" · "+(e.extrap?"تقدير خارج نطاق المعايرة":(e.ref?"معايرة مدمجة ":"")+pm);
-    var where=e.setting?" · الإعداد التقريبي "+e.setting:e.k&&e.offDial?" · خارج مدى "+gname(e.k):" · اختر طاحونتك تحت ويطلع لك إعدادها";
+    var where=e.setting?" · الإعداد التقريبي "+e.setting+(e.range?" (بين "+e.range.lo+" و "+e.range.hi+")":""):e.k&&e.offDial?" · خارج مدى "+gname(e.k):" · اختر طاحونتك تحت ويطلع لك إعدادها";
     $("rRaw").textContent=raw+where+"  (D10 وD90 وباقي الأرقام مقاسة من الصورة مباشرة)";
   }else{
     $("rD50").textContent="≈ "+n0(s.d50)+" µm";$("rD50L").textContent="D50 · الحجم الأوسط";
@@ -255,9 +258,11 @@ function listName(s,r){return s.grinder?sName(s):(r&&r.cal&&r.k&&r.setting?gname
 function renderSpreads(){
   var h='<span class="hint" style="margin:0">الفرشات</span>';
   cur.photos.forEach(function(p,i){h+='<span class="chipon">'+(i+1)+' ✓</span>'});
-  if(cur.photos.length<3)h+='<button type="button" class="btn dash" id="addSpread">+ فرشة '+(cur.photos.length===1?"ثانية":"ثالثة")+'</button>';
+  if(cur.photos.length<3)h+='<button type="button" class="btn dash" id="addSpread">+ فرشة '+(cur.photos.length===1?"ثانية":"ثالثة")+' (كاميرا)</button><button type="button" class="btn dash" id="addSpreadG">+ من المعرض</button>';
+  if(cur.photos.length===1)h+='<span class="hint" style="margin:0;flex-basis:100%">لقراءة أدق: افرش حفنة ثانية من نفس الطحنة وصوّرها كفرشة ثانية. المتوسط يقلّل الخطأ، لأن كل حفنة فيها حبيبات مختلفة.</span>';
   $("spreads").innerHTML=h;
   var b=$("addSpread");if(b)b.onclick=function(){addingSpread=true;$("cam").click()};
+  b=$("addSpreadG");if(b)b.onclick=function(){addingSpread=true;$("gal").click()};
 }
 
 function renderResult(){
@@ -466,7 +471,7 @@ function quickInfo(s){
   var el=$("qOut");if(!s){el.textContent="";return}
   if(!s.grinder){
     var k=$("qG").value,e=k?eqInfo(s):null;
-    el.textContent=e&&e.k===k&&e.setting?"هذي الطحنة تطابق الإعداد "+e.setting+" على "+gname(k)+".":e&&e.k===k&&e.offDial?"هذي الطحنة خارج مدى إعدادات "+gname(k)+".":"";
+    el.textContent=e&&e.k===k&&e.setting?"هذي الطحنة تطابق الإعداد "+e.setting+" على "+gname(k)+(e.range?"، وممكن تكون بين "+e.range.lo+" و "+e.range.hi:"")+".":e&&e.k===k&&e.offDial?"هذي الطحنة خارج مدى إعدادات "+gname(k)+".":"";
     return;
   }
   var c=GrindTranslate.contribution(samples,s).after,e=c.ready?eqInfo(s):null;

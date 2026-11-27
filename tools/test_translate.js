@@ -126,6 +126,11 @@ M.list.forEach(function(g){var d=T.dial(M,g.key);if(!dHigh&&Math.min(d.um(0),d.u
 var lo2=T.atMicron(dHigh,Math.min(dHigh.um(0),dHigh.um(dHigh.labels.length-1))*0.5);
 check("a number past the coarse end is flagged outside, with the coarsest setting and nothing coarser",hi&&hi.outside&&hi.coarser===null&&hi.chart===hi.hi);
 check("a number past the fine end is flagged outside, with the finest setting and nothing finer",lo2&&lo2.outside&&lo2.finer===null&&lo2.chart===lo2.lo);
+var rq=T.reference();
+check("built-in keeps its worst hold-one-out error, under 2%",rq.worst>rq.acc&&rq.worst<2,rq.worst.toFixed(2)+"%");
+var rgq=T.settingRange(dQA,796,rq.worst);
+check("Q Air 796 µm: the range holds the true setting 2.3.2 and stays within one click either side",rgq&&rgq.lo==="2.3.0"&&rgq.hi==="2.3.2",rgq&&rgq.lo+" – "+rgq.hi);
+check("a tiny margin gives no range (only one setting fits)",T.settingRange(dQA,793,0.3)===null);
 check("0, negative and junk give nothing",T.atMicron(dC40,0)===null&&T.atMicron(dC40,-5)===null&&T.atMicron(dC40,NaN)===null);
 var allOk=true,nG=0;M.list.forEach(function(g){var d=T.dial(M,g.key);if(!d)return;nG++;var mid=(d.um(0)+d.um(d.labels.length-1))/2,r=T.atMicron(d,mid);if(!r||typeof r.setting!=="string"||!r.setting||Math.abs(r.diff)>Math.abs(d.um(d.labels.length-1)-d.um(0))/2+1)allOk=false});
 check("every grinder in the list answers a mid-range number with a setting",allOk&&nG===M.list.length,nG+" grinders");

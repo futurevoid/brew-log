@@ -1,4 +1,23 @@
-window.onerror=function(m,u,l){var e=document.getElementById("jserr");if(e)e.textContent=String(m)+" (line "+l+")"};
+(function(){
+  function show(msg){
+    try{
+      var b=document.getElementById("errbar");
+      if(!b){
+        b=document.createElement("div");b.id="errbar";b.setAttribute("role","alert");
+        b.style.cssText="position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#b3261e;color:#fff;padding:10px 14px;border-radius:12px;font:600 13px/1.7 system-ui,sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.35)";
+        b.innerHTML='<div>صار خطأ غير متوقع. جرّب مرة ثانية، ولو تكرر أرسل لي الرسالة اللي تحت.</div><div id="errtxt" dir="ltr" style="font-weight:400;font-size:12px;opacity:.9;word-break:break-word"></div><button type="button" style="margin-top:6px;background:#fff;color:#b3261e;border:0;border-radius:8px;padding:4px 12px;font:700 13px system-ui,sans-serif">إغلاق</button>';
+        b.querySelector("button").onclick=function(){b.remove()};
+        document.body.appendChild(b);
+      }
+      b.querySelector("#errtxt").textContent=String(msg).slice(0,300);
+    }catch(e){}
+  }
+  window.onerror=function(m,u,l){
+    var e=document.getElementById("jserr");if(e)e.textContent=String(m)+" (line "+l+")";
+    show(String(m)+" (line "+l+")");
+  };
+  window.addEventListener("unhandledrejection",function(ev){var r=ev.reason;show("Promise: "+(r&&r.message?r.message:r));});
+})();
 var $=function(i){return document.getElementById(i)};
 $("jsmsg").style.display="none";
 
@@ -44,12 +63,14 @@ function show(v){
   if(v==="an")renderHome();if(v==="um")renderUm();if(v==="tr")renderTr();if(v==="cmp")renderCmp();if(v==="hist")renderHist();
   window.scrollTo(0,0);
 }
+$("toUm").onclick=function(e){e.preventDefault();show("um");$("umIn").focus()};
 $("tabs").addEventListener("click",function(e){var b=e.target.closest("button");if(b)show(b.dataset.v)});
 
 // ---------- coin ----------
 var coinSaved=lsGet("grind-coin",{v:"23",mm:""});
 $("coin").value=coinSaved.v;if(!$("coin").value)$("coin").value="23";$("coinMm").value=coinSaved.mm||"";
 // Coin diameters (Numista and other catalogues). 2016 series, gold-coloured: 1 riyal 23, 50 halalas 24, 25 halalas 21.5.
+// Gulf and Egypt coins (Numista/ucoin/CBB): UAE 1 dirham 23.8, 50 fils 21, 25 fils 20; Bahrain 100 fils 24; Kuwait 100 fils 26; Egypt 1 pound 25, 50 piastres 25, 25 piastres 21.
 // Older cupronickel (silver): 50 halalas 26, 25 halalas 23; their values end in "s" so they differ from the riyal.
 function coinMm(){var v=$("coin").value;return v==="custom"?(+$("coinMm").value||0):(parseFloat(v)||23)}
 function coinUi(){$("coinMmL").hidden=$("coin").value!=="custom";lsSet("grind-coin",{v:$("coin").value,mm:$("coinMm").value})}
@@ -93,7 +114,7 @@ var img=null,cur=null,photoIdx=0,res=null,mode=null,fix=null,crop=null,addingSpr
 var MAXSIDE=4032;
 var ENGINE=2; // measuring method of the saved numbers (2 = five runs per photo, fixed working pixel size)
 // Shown at the bottom of the page, so it is easy to see which version a phone is running.
-var APP_VER="2026-11-26 · merged with the latest brew log · built-in calibration · 5 coins";
+var APP_VER="2026-11-26 · merged with the latest brew log · built-in calibration · 13 coins";
 try{$("appVer").textContent="v "+APP_VER+(GrindTranslate.reference?"":" · old files")}catch(e){}
 function status(t){$("status").textContent=t||""}
 function newSession(){cur={id:"g"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),photos:[],sample:null};photoIdx=0}
@@ -362,7 +383,7 @@ function renderUm(){
   if(!k){el.innerHTML='<div class="note off">اختر الطاحونة.</div>';return}
   lsSet(UMKEY,raw);lsSet(LASTG,k);
   var r=GrindTranslate.atMicron(GrindTranslate.dial(Micron,k),u);
-  if(!r){el.innerHTML="";return}
+  if(!r){el.innerHTML='<div class="note off">ما قدرنا نحسب الإعداد لهذه الطاحونة. جرّب طاحونة ثانية أو رقم ثاني.</div>';return}
   var more=targets.filter(function(x){return x!==k}).map(function(x){
     var q=GrindTranslate.atMicron(GrindTranslate.dial(Micron,x),u);
     return q?'<div class="trrow"><div><b>'+esc(gname(x))+'</b><span dir="ltr">≈ '+n0(q.chart)+' µm'+(q.outside?" · خارج المدى":"")+'</span></div><div class="trset"><span>الإعداد</span><b dir="ltr">'+esc(q.setting)+'</b></div></div>':"";

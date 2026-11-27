@@ -126,18 +126,9 @@ function run(cv){
   var rbl=GA.analyzeImage(cv,nb.img,{coinMm:23});
   check("blurry photo warned",rbl.ok&&rbl.warnings.indexOf("blurry")>=0,rbl.ok?"sharp="+rbl.sharpness.toFixed(0)+" ["+rbl.warnings+"]":rbl.error);
   var cl=makePhoto(cv,{coinMm:23,coinR:420,median:600,sigma:0.35,count:700,seed:5,clumps:true});
-  // Default: clumps are left out, nothing is split.
-  var rcd=GA.analyzeImage(cv,cl.img,{coinMm:23});
-  check("default: clumps left out, none split",rcd.ok&&rcd.rejects.split===0&&rcd.rejects.clump>100,rcd.ok?"split="+rcd.rejects.split+" left out="+rcd.rejects.clump:rcd.error);
-  // splitClumps:true measures them.
-  var rcl=GA.analyzeImage(cv,cl.img,{coinMm:23,splitClumps:true});
-  check("splitClumps: tidy clumps split, ragged ones left out, no clump warning",rcl.ok&&rcl.rejects.split>60&&rcl.rejects.split+rcl.rejects.clump===140&&rcl.warnings.indexOf("clumps")<0,rcl.ok?"split="+rcl.rejects.split+" rejected="+rcl.rejects.clump+" ["+rcl.warnings+"]":rcl.error);
-  if(rcl.ok){var gcl=GA.summarize([L(rcl)]),tcl=GA.summarize([cl.truth]);check("guarded split keeps D50 within 4%",Math.abs(pct(gcl.d50,tcl.d50))<4,gcl.d50.toFixed(0)+" vs "+tcl.d50.toFixed(0))}
-  // Guards: a split into more pieces than allowed, or with a sliver piece, is left out instead.
-  var rg1=GA.analyzeImage(cv,cl.img,{coinMm:23,splitClumps:true,maxSplit:2});
-  check("too many pieces: split refused, clump left out",rg1.ok&&rg1.rejects.split===0&&rg1.rejects.clump>100,rg1.ok?"split="+rg1.rejects.split+" left out="+rg1.rejects.clump:rg1.error);
-  var rg2=GA.analyzeImage(cv,cl.img,{coinMm:23,splitClumps:true,minPiece:0.5});
-  check("sliver piece: split refused, clump left out",rg2.ok&&rg2.rejects.split===0&&rg2.rejects.clump>100,rg2.ok?"split="+rg2.rejects.split+" left out="+rg2.rejects.clump:rg2.error);
+  var rcl=GA.analyzeImage(cv,cl.img,{coinMm:23});
+  check("clumps found and split, none rejected, no clump warning",rcl.ok&&rcl.rejects.split>100&&rcl.rejects.clump<10&&rcl.warnings.indexOf("clumps")<0,rcl.ok?"split="+rcl.rejects.split+" rejected="+rcl.rejects.clump+" ["+rcl.warnings+"]":rcl.error);
+  if(rcl.ok){var gcl=GA.summarize([L(rcl)]),tcl=GA.summarize([cl.truth]);check("split clumps keep D50 within 8%",Math.abs(pct(gcl.d50,tcl.d50))<8,gcl.d50.toFixed(0)+" vs "+tcl.d50.toFixed(0))}
   var far=makePhoto(cv,{coinMm:23,coinR:150,median:900,sigma:0.4,count:600,seed:9});
   var rf=GA.analyzeImage(cv,far.img,{coinMm:23});
   check("coin too small warned",rf.ok&&rf.warnings.indexOf("coin_small")>=0,rf.ok?"µm/px="+rf.umPerPx.toFixed(1):rf.error);

@@ -114,7 +114,7 @@ var img=null,cur=null,photoIdx=0,res=null,mode=null,fix=null,crop=null,addingSpr
 var MAXSIDE=4032;
 var ENGINE=2; // measuring method of the saved numbers (2 = five runs per photo, fixed working pixel size)
 // Shown at the bottom of the page, so it is easy to see which version a phone is running.
-var APP_VER="2026-11-26 · merged with the latest brew log · built-in calibration · 15 coins";
+var APP_VER="2026-11-27 · built-in calibration ±1.3% · old readings left out · 15 coins";
 try{$("appVer").textContent="v "+APP_VER+(GrindTranslate.reference?"":" · old files")}catch(e){}
 function status(t){$("status").textContent=t||""}
 function newSession(){cur={id:"g"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),photos:[],sample:null};photoIdx=0}

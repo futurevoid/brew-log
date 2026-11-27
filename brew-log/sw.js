@@ -1,6 +1,6 @@
 // Offline support: the site's own files are fetched fresh (always checked with the server) when online and served from cache when
 // not; the 9 MB OpenCV.js file is versioned, so it is cached once and served from cache after that.
-var CACHE="brewlog-v3";
+var CACHE="brewlog-v4";
 var CV_URL="https://docs.opencv.org/4.10.0/opencv.js";
 var SHELL=["./","index.html","grind.html","style.css","grind.css","script.js","dial.js","grind.js","grind-worker.js","grind-analyze.js","grind-translate.js","grinders.js","roasters.js","recipes.js","discord-config.js","micron.js"];
 

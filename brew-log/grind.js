@@ -70,7 +70,7 @@ $("tabs").addEventListener("click",function(e){var b=e.target.closest("button");
 var coinSaved=lsGet("grind-coin",{v:"23",mm:""});
 $("coin").value=coinSaved.v;if(!$("coin").value)$("coin").value="23";$("coinMm").value=coinSaved.mm||"";
 // Coin diameters (Numista and other catalogues). 2016 series, gold-coloured: 1 riyal 23, 50 halalas 24, 25 halalas 21.5.
-// Gulf and Egypt coins (Numista/ucoin/CBB): UAE 1 dirham 23.8, 50 fils 21, 25 fils 20; Bahrain 100 fils 24; Kuwait 100 fils 26; Egypt 1 pound 25, 50 piastres 25, 25 piastres 21.
+// Gulf and Egypt coins (Numista/ucoin/CBB): UAE 1 dirham 23.8, 50 fils 21, 25 fils 20; Bahrain 100 fils 24; Kuwait 100 fils 26; Egypt 1 pound 25, 50 piastres 25, 25 piastres 21; Oman 50 baisa 24 (1999), 100 baisa 21.5 (1984, KM 68).
 // Older cupronickel (silver): 50 halalas 26, 25 halalas 23; their values end in "s" so they differ from the riyal.
 function coinMm(){var v=$("coin").value;return v==="custom"?(+$("coinMm").value||0):(parseFloat(v)||23)}
 function coinUi(){$("coinMmL").hidden=$("coin").value!=="custom";lsSet("grind-coin",{v:$("coin").value,mm:$("coinMm").value})}
@@ -114,7 +114,7 @@ var img=null,cur=null,photoIdx=0,res=null,mode=null,fix=null,crop=null,addingSpr
 var MAXSIDE=4032;
 var ENGINE=2; // measuring method of the saved numbers (2 = five runs per photo, fixed working pixel size)
 // Shown at the bottom of the page, so it is easy to see which version a phone is running.
-var APP_VER="2026-11-26 · merged with the latest brew log · built-in calibration · 13 coins";
+var APP_VER="2026-11-26 · merged with the latest brew log · built-in calibration · 15 coins";
 try{$("appVer").textContent="v "+APP_VER+(GrindTranslate.reference?"":" · old files")}catch(e){}
 function status(t){$("status").textContent=t||""}
 function newSession(){cur={id:"g"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:Date.now(),photos:[],sample:null};photoIdx=0}

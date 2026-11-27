@@ -14,7 +14,7 @@ function trueC40(i){return 40+29*i-0.12*i*i}
 function trueKU(i){return 60+6.6*i+0.004*i*i}
 function hist(d50){var h=[];for(var k=0;k<16;k++){var x=100*Math.pow(20,(k+0.5)/16);h.push(Math.exp(-Math.pow(Math.log(x/d50),2)/0.2))}var s=h.reduce(function(a,b){return a+b},0);return h.map(function(v){return v/s})}
 var id=0;
-function sample(key,i,d50,t){return {id:"s"+(++id),t:t||id,grinder:key,idx:i,setting:key?T.dial(M,key).labels[i]:null,calib:true,d50:d50,hist:hist(d50),under:0,over:0,fines:{100:0.02,150:0.05,200:0.1}}}
+function sample(key,i,d50,t){return {id:"s"+(++id),t:t||id,grinder:key,idx:i,setting:key?T.dial(M,key).labels[i]:null,calib:true,pv:2,d50:d50,hist:hist(d50),under:0,over:0,fines:{100:0.02,150:0.05,200:0.1}}}
 
 var S=[];
 [10,16,22,28,34].forEach(function(i){S.push(sample(C40,i,trueC40(i)))});
@@ -93,6 +93,10 @@ var QA=M.find("1Zpresso Q Air"),dQA=T.dial(M,QA),qS=[];
 var rg=T.regress(qS,QA,dQA);
 check("Q Air regression ready",!!rg&&rg.n===5,rg?"leave-one-out ±"+rg.acc.toFixed(1)+"%":"");
 check("Q Air regression leave-one-out under 4%",rg&&rg.acc<4);
+// Older-engine readings (no pv) must not count: the same five photos measured before the five-run method.
+var oldS=[["1.5.0",751],["2.0.0",951],["2.3.2",1074],["3.0.0",1369],["3.5.0",1529]].map(function(p){var s=sample(QA,Math.round(M.calc(QA,p[0]).i),p[1]);delete s.pv;return s});
+check("readings from the older measuring method are left out of the calibration",!T.curve(oldS,QA).ready&&!T.regress(oldS,QA,dQA),T.curve(oldS,QA).settings+" settings counted");
+check("mixed old and new readings: only the new ones count",T.curve(oldS.concat(qS),QA).samples===5);
 check("Q Air 2.3.2 photo reads about 805 um",rg&&Math.abs(rg.um(1074)-805)/805<0.04,rg?rg.um(1074).toFixed(0):"");
 check("regression needs the minimum settings",T.regress(qS.slice(0,3),QA,dQA)===null);
 

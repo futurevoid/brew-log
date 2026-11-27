@@ -183,17 +183,18 @@ function onResult(r){
 // grinder's own chart scale, so it reads like the grinder's setting does. The raw photo measurement stays beneath it.
 function eqInfo(s){
   var k=s.grinder||lsGet(LASTG,"");
-  // Your own calibration of this grinder wins once it has enough settings; otherwise the built-in one.
-  var own=k?ownEq(s,k):null;
-  if(own&&!own.outside)return own;
-  return refEq(s,k)||own;
+  // Your own calibration of this grinder wins once it has enough settings and is at least as accurate as the
+  // built-in one (both read on the same chart-micron scale); otherwise the built-in one.
+  var own=k?ownEq(s,k):null,ref=refEq(s,k);
+  if(own&&!own.outside&&!(ref&&!ref.extrap&&!(own.acc!=null&&own.acc<=GrindTranslate.reference().acc)))return own;
+  return ref||own;
 }
 // Built-in calibration: photo D50 -> chart micron (one scale for all grinders), then the grinder's chart gives the setting.
 function refEq(s,k){
   var r=GrindTranslate.reference(),um=r.um(s.d50);
   if(!(um>=60))return null;
-  // ±2%: the worst hold-one-out error of the built-in calibration on the real page.
-  var res={k:k||null,um:um,setting:null,acc:Math.max(2,r.acc),outside:false,extrap:s.d50<r.min*0.9||s.d50>r.max*1.1,ref:true};
+  // acc: hold-one-out error of the built-in calibration on the five real photos (about ±1.3%, worst photo 1.9%).
+  var res={k:k||null,um:um,setting:null,acc:r.acc,outside:false,extrap:s.d50<r.min*0.9||s.d50>r.max*1.1,ref:true};
   if(k){
     var d=GrindTranslate.dial(Micron,k),lo=Math.min(d.lo,d.hi),hi=Math.max(d.lo,d.hi),best=-1,bd=Infinity;
     if(um>=lo*0.97&&um<=hi*1.03){for(var i=0;i<d.labels.length;i++){if(!d.uniq[i])continue;var dv=Math.abs(d.um(i)-um);if(dv<bd){bd=dv;best=i}}res.setting=d.labels[best]}
@@ -202,6 +203,8 @@ function refEq(s,k){
   return res;
 }
 function scaleName(k){return k?"على سلّم "+gname(k):"بميكرون الجداول"}
+// Your own photo calibration of grinder k is used only when its hold-one-out error beats the built-in calibration.
+function useOwn(k){var d=GrindTranslate.dial(Micron,k),r=d&&GrindTranslate.regress(samples,k,d);return !!(r&&r.acc<=GrindTranslate.reference().acc)}
 function ownEq(s,k){
   var c=GrindTranslate.curve(samples,k);if(!c.ready)return null;
   var d=GrindTranslate.dial(Micron,k),r=GrindTranslate.regress(samples,k,d);
@@ -226,7 +229,7 @@ function headline(s){
   var e=eqInfo(s),raw="قياس الصورة الفعلي: D50 "+n0(s.d50)+" µm";
   if(e&&!e.outside){
     $("rD50").textContent="≈ "+n0(e.um)+" µm";
-    var pm=e.acc!=null?"\u2066±"+e.acc.toFixed(e.acc<1?1:0)+"%\u2069":"";
+    var pm=e.acc!=null?"\u2066±"+e.acc.toFixed(e.acc<10?1:0)+"%\u2069":"";
     $("rD50L").textContent=scaleName(e.k)+" · "+(e.extrap?"تقدير خارج نطاق المعايرة":(e.ref?"معايرة مدمجة ":"")+pm);
     var where=e.setting?" · الإعداد التقريبي "+e.setting:e.k&&e.offDial?" · خارج مدى "+gname(e.k):" · اختر طاحونتك تحت ويطلع لك إعدادها";
     $("rRaw").textContent=raw+where+"  (D10 وD90 وباقي الأرقام مقاسة من الصورة مباشرة)";
@@ -416,7 +419,7 @@ function renderTr(){
   calNote(s);
   var allow=$("allowEst").checked,ru=readout(s);
   $("trRows").innerHTML=targets.length?targets.map(function(k,i){
-    var r=GrindTranslate.translate(s,k,GrindTranslate.dial(Micron,k),samples,{allowEst:allow,um:ru.cal?ru.um:0}),note,cls;
+    var r=GrindTranslate.translate(s,k,GrindTranslate.dial(Micron,k),useOwn(k)?samples:samples.filter(function(x){return x.grinder!==k}),{allowEst:allow,um:ru.cal?ru.um:0}),note,cls;
     if(r.blocked){note="تحتاج "+r.need+" إعدادات مقاسة زيادة";cls="est"}
     else if(r.measured){note="مقاسة · "+r.samples+" قياسات"+(r.acc!=null?" · الدقة ±"+r.acc.toFixed(r.acc<1?1:0)+"%":"")+(r.overlap!=null?" · التطابق "+Math.round(r.overlap*100)+"%":"");cls="meas"}
     else{note=r.ref?"معايرة مدمجة + جدول الطاحونة":"تقدير من الجدول";cls="est"}
@@ -554,14 +557,18 @@ function renderHist(){
   var M=GrindTranslate.MIN_SETTINGS;
   $("calCard").innerHTML='<b>المعايرة على جوالك</b>'+(Object.keys(gs).length?Object.keys(gs).map(function(k){
     var cv=GrindTranslate.curve(samples,k),pct=Math.min(100,cv.settings/M*100);
-    return'<div class="calrow"><div><span>'+esc(gname(k))+'</span><span class="'+(cv.ready?"okc":"estc")+'">'+(cv.ready?cv.settings+" إعدادات · جاهزة"+(cv.acc!=null?" · ±"+cv.acc.toFixed(1)+"%":""):cv.settings+" من "+M)+'</span></div><i style="--w:'+pct+'%" class="'+(cv.ready?"":"part")+'"></i></div>';
+    return'<div class="calrow"><div><span>'+esc(gname(k))+'</span><span class="'+(cv.ready?"okc":"estc")+'">'+(cv.ready?cv.settings+" إعدادات · "+(useOwn(k)?"مستخدمة":"المدمجة أدق، فهي المستخدمة")+(cv.acc!=null?" · ±"+cv.acc.toFixed(1)+"%":""):cv.settings+" من "+M)+'</span></div><i style="--w:'+pct+'%" class="'+(cv.ready?"":"part")+'"></i></div>';
   }).join(""):'<p class="hint">حدد الطاحونة والإعداد لصورك من قسم «ترجمة»، وكل صورة تنحسب في معايرتها.</p>');
   var list=samples.slice().sort(function(a,b){return b.t-a.t});
   $("histList").innerHTML=list.length?list.map(function(s){
     var r=readout(s);
-    var meta=[fmtDate(s.t),s.spreads>1?s.spreads+" فرشات":"",s.grinder&&s.calib!==false?"معايرة":"","نواعم\u00a0"+pc(s.fines[c]||0)].filter(Boolean).join(" · ");
+    var meta=[fmtDate(s.t),s.spreads>1?s.spreads+" فرشات":"",(s.pv||1)<GrindTranslate.ENGINE?"قياس قديم · ما ينحسب في المعايرة":s.grinder&&s.calib!==false?"معايرة":"","نواعم\u00a0"+pc(s.fines[c]||0)].filter(Boolean).join(" · ");
     return'<div class="hrow"><div><b>'+esc(listName(s,r))+'</b><span>'+meta+'</span></div><div class="hnum"><b dir="ltr">'+(r.cal?"≈ "+n0(r.um)+" µm":"D50 "+n0(r.um))+'</b>'+(r.chart!=null?'<span>الجدول <bdi dir="ltr">'+n0(r.chart)+'</bdi></span>':"")+'</div><button type="button" class="btn" data-tr="'+s.id+'">ترجم</button><button type="button" class="btn del" data-del="'+s.id+'" aria-label="احذف القياس">✕</button></div>';
   }).join(""):'<p class="hint">ما فيه قياسات محفوظة بعد.</p>';
+  var old=samples.filter(function(s){return (s.pv||1)<GrindTranslate.ENGINE}).length;
+  $("histTools").innerHTML=samples.length?(old?'<button type="button" class="btn" id="delOld">احذف القياسات القديمة ('+old+')</button>':"")+'<button type="button" class="btn del" id="delAll">امسح السجل كله</button>':"";
+  if(old)$("delOld").onclick=function(){if(confirm("تحذف "+old+" قياس قديم؟ ما تنحسب في المعايرة لأنها انقاست بطريقة قياس أقدم.")){samples=samples.filter(function(s){return (s.pv||1)>=GrindTranslate.ENGINE});saveSamples();if(cur&&!samples.some(function(s){return s.id===cur.id}))cur=null;renderHist()}};
+  if(samples.length)$("delAll").onclick=function(){if(confirm("تمسح كل القياسات ("+samples.length+")؟ ما تقدر ترجعها إلا من ملف مصدّر.")){samples=[];saveSamples();cur=null;renderHist()}};
 }
 $("histList").addEventListener("click",function(e){
   var t=e.target.closest("[data-tr]"),d=e.target.closest("[data-del]");

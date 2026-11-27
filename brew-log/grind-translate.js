@@ -40,10 +40,13 @@
   }
 
   // Calibration curve for one grinder from this device's tagged samples (calib !== false).
+  // Only samples measured with the current method (pv >= ENGINE) count: older readings sit on a different scale
+  // (the 3.0.0 Q Air photo read 1,369 µm before and 1,318 µm now), and mixing them in pulls new readings off.
+  var ENGINE=2;
   function curve(samples,key,skipId){
     var by={};
     samples.forEach(function(s){
-      if(s.grinder===key&&s.idx!=null&&s.calib!==false&&s.id!==skipId&&s.d50>0)(by[s.idx]=by[s.idx]||[]).push(s);
+      if(s.grinder===key&&s.idx!=null&&s.calib!==false&&s.id!==skipId&&s.d50>0&&(s.pv||1)>=ENGINE)(by[s.idx]=by[s.idx]||[]).push(s);
     });
     var pts=Object.keys(by).map(Number).sort(function(a,b){return a-b}).map(function(i){
       var l=by[i],h=avgHist(l);
@@ -216,7 +219,7 @@
       outside:u<lo*0.97||u>hi*1.03};
   }
 
-  var api={dial:dial,atMicron:atMicron,MIN_SETTINGS:MIN_SETTINGS,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
+  var api={dial:dial,atMicron:atMicron,MIN_SETTINGS:MIN_SETTINGS,ENGINE:ENGINE,pchip:pchip,curve:curve,translate:translate,overlap:overlap,histAt:histAt,
     contribution:contribution,extrapolate:extrapolate,regress:regress,reference:reference,wear:wear,busiest:busiest,latestPair:latestPair};
   if(typeof module==="object"&&module.exports)module.exports=api;else root.GrindTranslate=api;
 })(typeof self!=="undefined"?self:this);

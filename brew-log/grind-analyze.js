@@ -3,7 +3,12 @@
 // Pure functions of the pixels and options, so the same photo always gives the same result.
 (function(root){
   var BINS=16,BIN_LO=100,BIN_HI=2000,CUTOFFS=[100,150,200];
-  var NOISE_PX=3,CLUMP_SOLIDITY=0.85,CLUMP_NOTCH=0.25,SOLIDITY_MIN_AREA=30,MAX_SPLIT=60;
+  var NOISE_PX=3,CLUMP_SOLIDITY=0.85,CLUMP_NOTCH=0.25,SOLIDITY_MIN_AREA=30;
+  // Touching grains. By default a clump is left out of the measurement, as before the watershed splitter was added:
+  // splitting over-cuts angular real grains into fragments and pulled D50 down. Pass splitClumps:true to measure them.
+  // Even then a split is only trusted when it is small and tidy: at most MAX_SPLIT pieces and none a sliver
+  // (each piece at least MIN_PIECE_FRAC of the clump). Anything else is left out like an unsplittable lump.
+  var SPLIT_CLUMPS=false,MAX_SPLIT=4,MIN_PIECE_FRAC=0.15;
   // Lumpy blobs that can't be split are left out. Measuring them whole (or after a finer split) was tried on the
   // real Q Air photos: it made the calibration less straight (hold-one-out 1.7% -> 2.2-2.3% rms), so they stay out.
   // Every photo is measured at the same pixel size (µm per pixel), so the result doesn't depend on
@@ -141,9 +146,11 @@
   function percentile(arr,p){if(!arr.length)return 0;var a=arr.slice().sort(function(x,y){return x-y});return a[Math.min(a.length-1,Math.floor(p*(a.length-1)))]}
 
   // One photo -> scale, particles and quality checks.
-  // img: {data:Uint8ClampedArray RGBA, width, height}; o: {coinMm, coin?:{x,y,r} manual, crop?:{x,y,w,h}}
+  // img: {data:Uint8ClampedArray RGBA, width, height}; o: {coinMm, coin?:{x,y,r} manual, crop?:{x,y,w,h},
+  //   splitClumps?:bool (measure touching grains after splitting; default off), maxSplit?, minPiece?}
   function analyzeImage(cv,img,o){
     o=o||{};
+    var doSplit=o.splitClumps===undefined?SPLIT_CLUMPS:!!o.splitClumps,maxSplit=o.maxSplit||MAX_SPLIT,minPiece=o.minPiece===undefined?MIN_PIECE_FRAC:o.minPiece;
     var src=cv.matFromImageData(img),gray=new cv.Mat(),mats=[src,gray];
     function keep(m){mats.push(m);return m}
     try{
@@ -229,10 +236,14 @@
             if(bx<=cropP.x||by<=cropP.y||bx+bwid>=cropP.x+cropP.w||by+bh>=cropP.y+cropP.h){rej.edge++;status=2}
             else if(offPaper(cx/pf,cy/pf)){rej.edge++;status=2}
             else if(area>=SOLIDITY_MIN_AREA&&isClump(cv,lab,PW,i,bx,by,bwid,bh,rpx)){
-              // Touching grains: split them (distance transform + watershed) instead of throwing them away.
-              var pieces=splitClump(cv,lab,PW,i,bx,by,bwid,bh);
+              // Touching grains: with splitClumps on, cut them (distance transform + watershed) instead of throwing them away.
+              var pieces=doSplit?splitClump(cv,lab,PW,i,bx,by,bwid,bh):null;
+              if(pieces&&pieces.length>1){
+                var tot=0;pieces.forEach(function(q){tot+=q.a});
+                if(pieces.length>maxSplit||pieces.some(function(q){return q.a<minPiece*tot}))pieces=null;
+              }
               if(pieces&&pieces.length===1){diams.push(2*Math.sqrt(pieces[0].a/Math.PI)*pum);var a1=axes(area,mSx[i],mSy[i],mSxx[i],mSyy[i],mSxy[i]);widths.push(a1[1]*pum);lengths.push(a1[0]*pum);mark(cx,cy,rpx,0);continue}
-              if(pieces&&pieces.length>1&&pieces.length<=MAX_SPLIT){
+              if(pieces&&pieces.length>1){
                 rej.split++;
                 pieces.forEach(function(q){var pr=Math.sqrt(q.a/Math.PI);diams.push(2*pr*pum);var aq=axes(q.a,q.sx,q.sy,q.sxx,q.syy,q.sxy);widths.push(aq[1]*pum);lengths.push(aq[0]*pum);mark(bx+q.x,by+q.y,pr,3)});
                 continue;
